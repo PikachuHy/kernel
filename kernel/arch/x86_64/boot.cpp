@@ -4,6 +4,7 @@
 #include "kernel/arch/x86_64/gdt.hpp"
 #include "kernel/arch/x86_64/idt.hpp"
 #include "kernel/lib/klog.hpp"
+#include "kernel/lib/serial.hpp"
 #include "kernel/lib/panic.hpp"
 
 static uint8_t boot_stack[65536];
@@ -34,8 +35,19 @@ static stivale2_struct_tag_memmap* get_memmap(stivale2_struct* info) {
     return nullptr;
 }
 
+static void debug_outb(uint16_t port, uint8_t value) {
+    asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
+}
+
 extern "C" void kernel_entry(stivale2_struct* info) {
+    // QEMU debug port — appears on console with -debugcon stdio
+    debug_outb(0xE9, 'K');
+    debug_outb(0xE9, '\n');
+
+    serial_init();
+    debug_outb(0xE9, 'S');
     klog_init(info);
+    debug_outb(0xE9, 'F');
 
     klog("\n=== C++26 Kernel ===\n");
     klog("Bootloader: ");

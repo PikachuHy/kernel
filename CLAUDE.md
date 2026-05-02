@@ -1,0 +1,32 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project
+
+A modern hybrid kernel written in C++26 targeting x86-64, with production ambition. Object-based architecture with capability security model (Zircon-inspired). Performance-oriented: scheduler, MM, IPC, VFS, block, and network run in kernel space; USB, HID, graphics, and audio run as user-space drivers.
+
+## Key Decisions
+
+- **Architecture:** Object-based hybrid kernel (Approach B in design spec)
+- **Bootloader:** Limine (stivale2 protocol)
+- **Build system:** Bazel 9 with MODULE.bazel
+- **Dev host:** macOS with LLVM/Clang cross-compilation to `x86_64-unknown-elf`
+- **C++:** Freestanding C++26 — no exceptions (kernel panics on throw), no RTTI except for Object Manager type checking
+
+## Design Docs
+
+- Design spec: `docs/superpowers/specs/2026-05-02-c++26-kernel-design.md`
+- Implementation plans: `docs/superpowers/plans/`
+
+### Phase Plans
+
+| Phase | Plan | Status |
+|-------|------|--------|
+| 1: Foundation | `docs/superpowers/plans/2026-05-02-phase-1-foundation.md` | Ready |
+| 2: Memory Management | TBD | — |
+| 3-10: Remaining | TBD | — |
+
+## Build / Test / Lint
+
+Not yet configured in tree. Phase 1 sets up the Bazel cross-compilation toolchain. See the Phase 1 plan for build commands.

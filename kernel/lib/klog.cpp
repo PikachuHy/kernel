@@ -1,4 +1,5 @@
 #include "kernel/lib/klog.hpp"
+#include "kernel/lib/serial.hpp"
 #include "stivale2.h"
 
 namespace {
@@ -183,6 +184,7 @@ void klog_init(stivale2_struct* info) {
 }
 
 void klog_putc(char c) {
+    serial_putc(c);
     if (fb.addr == nullptr) return;
     if (c == '\n') {
         newline();

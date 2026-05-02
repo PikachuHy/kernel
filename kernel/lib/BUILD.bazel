@@ -5,10 +5,12 @@ cc_library(
     srcs = [
         "klog.cpp",
         "panic.cpp",
+        "serial.cpp",
     ],
     hdrs = [
         "klog.hpp",
         "panic.hpp",
+        "serial.hpp",
     ],
     deps = [
         "//third_party/limine:stivale2",
