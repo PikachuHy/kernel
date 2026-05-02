@@ -12,9 +12,10 @@ PHDRS
 
 SECTIONS
 {
-    /* Phase 1: identity-mapped at 2MB. Higher-half (0xFFFF'8000'0000'0000)
-       will be set up in Phase 2 when paging is enabled. */
-    . = 0x200000 + SIZEOF_HEADERS;
+    /* Limine stivale2 requires the kernel in the higher half.
+       Limine sets up paging so this virtual address maps to the
+       physical load address. */
+    . = 0xFFFFFFFF80000000 + SIZEOF_HEADERS;
 
     .stivale2hdr : {
         KEEP(*(.stivale2hdr))
