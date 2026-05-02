@@ -1,6 +1,6 @@
 filegroup(
     name = "limine_cfg",
-    srcs = ["limine.cfg"],
+    srcs = ["limine.conf"],
     visibility = ["//visibility:public"],
 )
 

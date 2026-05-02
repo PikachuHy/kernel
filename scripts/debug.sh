@@ -22,7 +22,7 @@ diskutil partitionDisk "$DISK_DEV" 1 MBR "MS-DOS FAT32" "KERNEL" 100% 2>/dev/nul
 
 MOUNT_POINT="/Volumes/KERNEL"
 cp "$KERNEL_ELF" "$MOUNT_POINT/kernel.elf"
-cp "$ROOT_DIR/limine.cfg" "$MOUNT_POINT/limine.cfg"
+cp "$ROOT_DIR/limine.conf" "$MOUNT_POINT/limine.conf"
 cp "$LIMINE_DIR/limine-bios.sys" "$MOUNT_POINT/"
 
 hdiutil detach "$DISK_DEV" 2>/dev/null
