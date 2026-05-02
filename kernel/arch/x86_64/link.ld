@@ -17,8 +17,8 @@ SECTIONS
        physical load address. */
     . = 0xFFFFFFFF80000000 + SIZEOF_HEADERS;
 
-    .stivale2hdr : {
-        KEEP(*(.stivale2hdr))
+    .limine_reqs : {
+        KEEP(*(.limine_reqs))
     } :headers
 
     .text : {

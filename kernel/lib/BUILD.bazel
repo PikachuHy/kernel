@@ -13,7 +13,7 @@ cc_library(
         "serial.hpp",
     ],
     deps = [
-        "//third_party/limine:stivale2",
+        "//third_party/limine:limine",
     ],
     visibility = ["//visibility:public"],
 )

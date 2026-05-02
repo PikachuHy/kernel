@@ -1,6 +1,6 @@
 #include "kernel/lib/klog.hpp"
 #include "kernel/lib/serial.hpp"
-#include "stivale2.h"
+#include "limine.h"
 
 namespace {
 
@@ -164,22 +164,13 @@ void newline() {
 
 } // namespace
 
-void klog_init(stivale2_struct* info) {
-    stivale2_struct_tag_framebuffer* fb_tag = nullptr;
-    stivale2_tag* tag = (stivale2_tag*)info->tags;
-    while (tag) {
-        if (tag->identifier == STIVALE2_STRUCT_TAG_FRAMEBUFFER_ID) {
-            fb_tag = (stivale2_struct_tag_framebuffer*)tag;
-            break;
-        }
-        tag = (stivale2_tag*)tag->next;
-    }
-    if (fb_tag) {
-        fb.addr = (uint8_t*)fb_tag->framebuffer_addr;
-        fb.width = fb_tag->framebuffer_width;
-        fb.height = fb_tag->framebuffer_height;
-        fb.pitch = fb_tag->framebuffer_pitch;
-        fb.bpp = fb_tag->framebuffer_bpp;
+void klog_init(limine_framebuffer* framebuffer) {
+    if (framebuffer) {
+        fb.addr = (uint8_t*)framebuffer->address;
+        fb.width = framebuffer->width;
+        fb.height = framebuffer->height;
+        fb.pitch = framebuffer->pitch;
+        fb.bpp = framebuffer->bpp;
     }
 }
 

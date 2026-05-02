@@ -6,3 +6,10 @@ cc_library(
     includes = ["."],
     visibility = ["//visibility:public"],
 )
+
+cc_library(
+    name = "limine",
+    hdrs = ["limine.h"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)

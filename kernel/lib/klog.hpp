@@ -3,9 +3,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct stivale2_struct;
+struct limine_framebuffer;
 
-void klog_init(struct stivale2_struct* info);
+void klog_init(struct limine_framebuffer* fb);
 void klog_putc(char c);
 void klog_write(const char* str, size_t len);
 void klog(const char* str);

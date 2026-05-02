@@ -13,7 +13,7 @@ cc_library(
     ],
     deps = [
         "//kernel/lib:klib",
-        "//third_party/limine:stivale2",
+        "//third_party/limine:limine",
     ],
     visibility = ["//visibility:public"],
 )
