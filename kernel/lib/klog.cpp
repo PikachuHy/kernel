@@ -214,3 +214,18 @@ void klog_hex(uint64_t value) {
         klog_putc(hex[(value >> i) & 0xF]);
     }
 }
+
+void klog_dec(uint64_t value) {
+    if (value == 0) {
+        klog_putc('0');
+        return;
+    }
+    char buf[21];
+    int i = 20;
+    buf[i] = '\0';
+    while (value > 0) {
+        buf[--i] = '0' + (value % 10);
+        value /= 10;
+    }
+    klog(&buf[i]);
+}

@@ -28,7 +28,7 @@ struct [[gnu::packed]] InterruptFrame {
     uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
     uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
     uint64_t int_no, err_code;
-    uint64_t rip, cs, rflags, rsp, ss;
+    uint64_t rip, cs, rflags;
 };
 
 const char* exception_names[] = {
@@ -78,8 +78,6 @@ extern "C" void exception_handler(InterruptFrame* frame) {
     klog_hex(frame->err_code);
     klog("\nRIP: ");
     klog_hex(frame->rip);
-    klog("\nRSP: ");
-    klog_hex(frame->rsp);
     klog("\n");
 
     while (1) {

@@ -10,3 +10,4 @@ void klog_putc(char c);
 void klog_write(const char* str, size_t len);
 void klog(const char* str);
 void klog_hex(uint64_t value);
+void klog_dec(uint64_t value);

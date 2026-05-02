@@ -15,7 +15,7 @@
     klog("File: ");
     klog(file);
     klog("\nLine: ");
-    klog_hex(line);
+    klog_dec(line);
     klog("\nMessage: ");
     klog(msg);
     klog("\n");
