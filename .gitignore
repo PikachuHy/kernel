@@ -1,4 +1,4 @@
 .worktrees/
-bazel-*/
+bazel-*
 build/
 MODULE.bazel.lock
