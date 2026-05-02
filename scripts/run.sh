@@ -30,8 +30,7 @@ xorriso -as mkisofs -b boot/limine-bios-cd.bin \
     -no-emul-boot -boot-load-size 4 -boot-info-table \
     --efi-boot boot/limine-uefi-cd.bin \
     -efi-boot-part --efi-boot-image --protective-msdos-label \
-    "$ISO_DIR" -o "$ISO_IMAGE" 2>/dev/null
-
+    "$ISO_DIR" -o "$ISO_IMAGE" 
 limine bios-install "$ISO_IMAGE"
 
 echo "==> Starting QEMU..."
