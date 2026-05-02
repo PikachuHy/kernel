@@ -1,0 +1,15 @@
+cc_library(
+    name = "klib",
+    srcs = [
+        "klog.cpp",
+        "panic.cpp",
+    ],
+    hdrs = [
+        "klog.hpp",
+        "panic.hpp",
+    ],
+    deps = [
+        "//third_party/limine:stivale2",
+    ],
+    visibility = ["//visibility:public"],
+)
