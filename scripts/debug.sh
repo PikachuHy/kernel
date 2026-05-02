@@ -26,11 +26,13 @@ cp "$LIMINE_DIR/BOOTX64.EFI" "$ISO_DIR/EFI/BOOT/"
 cp "$LIMINE_DIR/BOOTIA32.EFI" "$ISO_DIR/EFI/BOOT/"
 
 echo "==> Creating bootable ISO..."
-xorriso -as mkisofs -b boot/limine-bios-cd.bin \
-    -no-emul-boot -boot-load-size 4 -boot-info-table \
+BOOT_SIZE=$(($(stat -f%z "$LIMINE_DIR/limine-bios-cd.bin") / 512))
+xorriso -as mkisofs -R -b boot/limine-bios-cd.bin \
+    -no-emul-boot -boot-load-size "$BOOT_SIZE" -boot-info-table \
     --efi-boot boot/limine-uefi-cd.bin \
     -efi-boot-part --efi-boot-image --protective-msdos-label \
-    "$ISO_DIR" -o "$ISO_IMAGE" 
+    "$ISO_DIR" -o "$ISO_IMAGE"
+
 limine bios-install "$ISO_IMAGE"
 
 echo "==> Starting QEMU with GDB stub (port 1234)..."

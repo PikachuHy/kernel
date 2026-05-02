@@ -27,7 +27,7 @@ cp "$LIMINE_DIR/BOOTIA32.EFI" "$ISO_DIR/EFI/BOOT/"
 
 echo "==> Creating bootable ISO..."
 BOOT_SIZE=$(($(stat -f%z "$LIMINE_DIR/limine-bios-cd.bin") / 512))
-xorriso -as mkisofs -b boot/limine-bios-cd.bin \
+xorriso -as mkisofs -R -b boot/limine-bios-cd.bin \
     -no-emul-boot -boot-load-size "$BOOT_SIZE" -boot-info-table \
     --efi-boot boot/limine-uefi-cd.bin \
     -efi-boot-part --efi-boot-image --protective-msdos-label \
