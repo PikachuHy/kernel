@@ -1,0 +1,2 @@
+# Host-side unit tests will be added in Phase 2 (memory allocators)
+# Phase 1 verification is manual: boot kernel in QEMU and observe output.
