@@ -147,7 +147,7 @@ Limine → kernel entry (long mode)
 
 ### Project Structure and Build
 
-**Bazel 9 with MODULE.bazel.** Custom `cc_toolchain` for x86-64-elf cross-compilation from macOS using LLVM/Clang. Freestanding C++26 (no libc, no exceptions by default, no RTTI except opt-in).
+**Bazel 9 with MODULE.bazel.** Custom `cc_toolchain` for x86-64-elf cross-compilation from macOS using LLVM/Clang. Freestanding C++26 (no libc, no exceptions — kernel panics on throw, no RTTI except where needed for Object Manager type checking).
 
 ```
 kernel/
