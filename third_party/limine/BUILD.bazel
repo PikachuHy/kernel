@@ -1,0 +1,6 @@
+cc_library(
+    name = "stivale2",
+    hdrs = ["stivale2.h"],
+    includes = ["."],
+    visibility = ["//visibility:public"],
+)
