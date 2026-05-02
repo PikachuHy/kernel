@@ -5,6 +5,16 @@
 
 #define LIMINE_COMMON_MAGIC 0xc7b1dd30df4c8b88, 0x0a82e883a194f07b
 
+/* Request-specific IDs (3rd and 4th values of id[4]) */
+#define LIMINE_BOOTLOADER_INFO_REQUEST_ID \
+    0xf55038d8e2a1202f, 0x279426fcf5f59740
+
+#define LIMINE_FRAMEBUFFER_REQUEST_ID \
+    0x9d5827dcd881dd75, 0xa3148604f6fab11b
+
+#define LIMINE_MEMMAP_REQUEST_ID \
+    0x67cf3d9d378a806f, 0xe304acdfc50c3c62
+
 struct limine_uuid {
     uint32_t a;
     uint16_t b;

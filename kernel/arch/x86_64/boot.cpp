@@ -10,19 +10,19 @@
 static uint8_t boot_stack[65536];
 
 static volatile struct limine_framebuffer_request framebuffer_request = {
-    .id = {LIMINE_COMMON_MAGIC},
+    .id = {LIMINE_COMMON_MAGIC, LIMINE_FRAMEBUFFER_REQUEST_ID},
     .revision = 0,
     .response = nullptr,
 };
 
 static volatile struct limine_bootloader_info_request bootloader_info_request = {
-    .id = {LIMINE_COMMON_MAGIC},
+    .id = {LIMINE_COMMON_MAGIC, LIMINE_BOOTLOADER_INFO_REQUEST_ID},
     .revision = 0,
     .response = nullptr,
 };
 
 static volatile struct limine_memmap_request memmap_request = {
-    .id = {LIMINE_COMMON_MAGIC},
+    .id = {LIMINE_COMMON_MAGIC, LIMINE_MEMMAP_REQUEST_ID},
     .revision = 0,
     .response = nullptr,
 };
@@ -35,24 +35,15 @@ static volatile void* limine_requests[] = {
     nullptr,
 };
 
-static void debug_outb(uint16_t port, uint8_t value) {
-    asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
-}
-
 extern "C" void kernel_entry(void) {
     // Set up our own stack
     asm volatile("movq %0, %%rsp" : : "r"(&boot_stack[sizeof(boot_stack)]));
 
-    debug_outb(0xE9, 'K');
-    debug_outb(0xE9, '\n');
-
     serial_init();
-    debug_outb(0xE9, 'S');
 
     klog_init(
         framebuffer_request.response ? framebuffer_request.response->framebuffers[0] : nullptr
     );
-    debug_outb(0xE9, 'F');
 
     klog("\n=== C++26 Kernel ===\n");
 
