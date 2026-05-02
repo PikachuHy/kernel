@@ -40,4 +40,37 @@ local_path_override(
     path = "/tmp/rules_license-1.0.0-release",
 )
 
+# NOTE: These local overrides for rules_java, rules_shell, etc. are needed when
+# building offline (no network to BCR). When network is available, they can be
+# removed -- Bazel will download the real modules from the Bazel Central Registry.
+local_path_override(
+    module_name = "rules_java",
+    path = "/tmp/rules_java_stub",
+)
+
+local_path_override(
+    module_name = "rules_shell",
+    path = "/tmp/rules_shell_stub",
+)
+
+local_path_override(
+    module_name = "rules_python",
+    path = "/tmp/rules_python_stub",
+)
+
+local_path_override(
+    module_name = "apple_support",
+    path = "/tmp/apple_support_stub",
+)
+
+local_path_override(
+    module_name = "buildozer",
+    path = "/tmp/buildozer_stub",
+)
+
+local_path_override(
+    module_name = "zlib",
+    path = "/tmp/zlib_stub",
+)
+
 register_toolchains("//toolchain:x86_64_elf_toolchain")
