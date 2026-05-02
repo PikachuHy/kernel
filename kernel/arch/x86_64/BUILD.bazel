@@ -1,0 +1,23 @@
+cc_library(
+    name = "arch",
+    srcs = [
+        "boot.cpp",
+        "gdt.cpp",
+        "idt.cpp",
+    ],
+    hdrs = [
+        "gdt.hpp",
+        "idt.hpp",
+    ],
+    deps = [
+        "//kernel/lib:klib",
+        "//third_party/limine:stivale2",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "linker_script",
+    srcs = ["link.ld"],
+    visibility = ["//visibility:public"],
+)
