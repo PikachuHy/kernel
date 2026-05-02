@@ -2,3 +2,42 @@ module(
     name = "kernel",
     version = "0.1.0",
 )
+
+bazel_dep(name = "rules_cc", version = "0.2.18")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
+bazel_dep(name = "bazel_features", version = "1.43.0")
+bazel_dep(name = "protobuf", version = "27.0", repo_name = "com_google_protobuf")
+bazel_dep(name = "rules_license", version = "1.0.0")
+
+local_path_override(
+    module_name = "rules_cc",
+    path = "/tmp/rules_cc-0.2.18/rules_cc-0.2.18",
+)
+
+local_path_override(
+    module_name = "bazel_skylib",
+    path = "/tmp/bazel-skylib-1.8.2-release",
+)
+
+local_path_override(
+    module_name = "bazel_features",
+    path = "/tmp/bazel_features-1.43.0-release/bazel_features-1.43.0",
+)
+
+local_path_override(
+    module_name = "protobuf",
+    path = "/tmp/protobuf_stub",
+)
+
+local_path_override(
+    module_name = "platforms",
+    path = "/tmp/platforms-1.0.0-release",
+)
+
+local_path_override(
+    module_name = "rules_license",
+    path = "/tmp/rules_license-1.0.0-release",
+)
+
+register_toolchains("//toolchain:x86_64_elf_toolchain")

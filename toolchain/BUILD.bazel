@@ -1,0 +1,99 @@
+load("@rules_cc//cc:defs.bzl", "cc_toolchain")
+load(":toolchain_config.bzl", "cc_toolchain_config")
+
+package(default_visibility = ["//visibility:public"])
+
+filegroup(name = "empty")
+
+cc_toolchain_config(
+    name = "x86_64_elf_config",
+    compiler = "clang",
+    toolchain_identifier = "x86_64-elf-clang",
+    host_system_name = "x86_64-darwin",
+    target_system_name = "x86_64-unknown-elf",
+    target_libc = "unknown",
+    abi_version = "elf",
+    abi_libc_version = "unknown",
+    target_cpu = "x86_64",
+    builtin_sysroot = "/dev/null",
+    tool_paths = {
+        "gcc": "clang",
+        "g++": "clang++",
+        "cpp": "clang-cpp",
+        "ar": "llvm-ar",
+        "nm": "llvm-nm",
+        "ld": "ld.lld",
+        "objcopy": "llvm-objcopy",
+        "objdump": "llvm-objdump",
+        "strip": "llvm-strip",
+    },
+    cxx_builtin_include_directories = [],
+    compile_flags = [
+        "-target",
+        "x86_64-unknown-elf",
+        "-ffreestanding",
+        "-nostdlib",
+        "-nostdinc",
+        "-std=c++26",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-mno-red-zone",
+        "-mno-mmx",
+        "-mno-sse",
+        "-mno-sse2",
+        "-mgeneral-regs-only",
+        "-mcmodel=kernel",
+    ],
+    dbg_compile_flags = [
+        "-g",
+        "-O0",
+    ],
+    opt_compile_flags = [
+        "-O2",
+        "-DNDEBUG",
+    ],
+    cxx_flags = [
+        "-fno-use-cxa-atexit",
+    ],
+    link_flags = [
+        "-target",
+        "x86_64-unknown-elf",
+        "-nostdlib",
+        "-nostartfiles",
+        "-ffreestanding",
+        "-Wl,-z,max-page-size=0x1000",
+        "-Wl,-build-id=none",
+    ],
+    dbg_link_flags = [],
+    opt_link_flags = [],
+)
+
+cc_toolchain(
+    name = "x86_64_elf_cc_toolchain",
+    all_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    supports_param_files = 0,
+    toolchain_config = ":x86_64_elf_config",
+    toolchain_identifier = "x86_64-elf-clang",
+)
+
+toolchain(
+    name = "x86_64_elf_toolchain",
+    exec_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:osx",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:none",
+    ],
+    toolchain = ":x86_64_elf_cc_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
