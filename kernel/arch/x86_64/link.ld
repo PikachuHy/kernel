@@ -12,11 +12,8 @@ SECTIONS
 {
     /* Limine protocol requires the kernel in the higher half.
        Limine sets up paging so this virtual address maps to the
-       physical load address.
-       Limine 12.x requires segments with different permissions
-       to not share the same page. So we merge .limine_reqs,
-       .text, and .rodata into one RX segment. */
-    . = 0xFFFFFFFF80000000 + SIZEOF_HEADERS;
+       physical load address. Start at a page-aligned address. */
+    . = 0xFFFFFFFF80000000;
 
     .limine_reqs : {
         KEEP(*(.limine_reqs))
@@ -29,6 +26,8 @@ SECTIONS
     .rodata : {
         *(.rodata .rodata.*)
     } :rx
+
+    . = ALIGN(0x1000);
 
     .data : {
         *(.data .data.*)
