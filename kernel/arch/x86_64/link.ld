@@ -4,39 +4,40 @@ ENTRY(kernel_entry)
 
 PHDRS
 {
-    headers PT_LOAD FILEHDR PHDRS;
-    text    PT_LOAD;
-    rodata  PT_LOAD;
-    data    PT_LOAD;
+    rx  PT_LOAD;
+    rw  PT_LOAD;
 }
 
 SECTIONS
 {
-    /* Limine stivale2 requires the kernel in the higher half.
+    /* Limine protocol requires the kernel in the higher half.
        Limine sets up paging so this virtual address maps to the
-       physical load address. */
+       physical load address.
+       Limine 12.x requires segments with different permissions
+       to not share the same page. So we merge .limine_reqs,
+       .text, and .rodata into one RX segment. */
     . = 0xFFFFFFFF80000000 + SIZEOF_HEADERS;
 
     .limine_reqs : {
         KEEP(*(.limine_reqs))
-    } :headers
+    } :rx
 
     .text : {
         *(.text .text.*)
-    } :text
+    } :rx
 
     .rodata : {
         *(.rodata .rodata.*)
-    } :rodata
+    } :rx
 
     .data : {
         *(.data .data.*)
-    } :data
+    } :rw
 
     .bss : {
         *(COMMON)
         *(.bss .bss.*)
-    } :data
+    } :rw
 
     /DISCARD/ : {
         *(.eh_frame)
