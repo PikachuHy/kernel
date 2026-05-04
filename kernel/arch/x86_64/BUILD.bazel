@@ -3,14 +3,18 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 cc_library(
     name = "arch",
     srcs = [
+        "apic.cpp",
         "boot.cpp",
         "gdt.cpp",
         "idt.cpp",
         "paging.cpp",
     ],
     hdrs = [
+        "apic.hpp",
         "gdt.hpp",
         "idt.hpp",
+        "io.hpp",
+        "msr.hpp",
     ],
     deps = [
         "//kernel/core/mm:mm",
