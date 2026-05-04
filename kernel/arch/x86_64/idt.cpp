@@ -56,15 +56,19 @@ const char* exception_names[] = {
     "#CP Control Protection Exception",
 };
 
-void set_entry(int idx, uint64_t handler, uint8_t ist, uint8_t type_attr) {
-    idt[idx].offset_low = handler & 0xFFFF;
-    idt[idx].offset_mid = (handler >> 16) & 0xFFFF;
-    idt[idx].offset_high = (handler >> 32) & 0xFFFFFFFF;
-    idt[idx].selector = 0x08;
-    idt[idx].ist = ist;
-    idt[idx].type_attr = type_attr;
-    idt[idx].reserved = 0;
+} // namespace
+
+void idt_set_gate(uint8_t vector, uint64_t handler, uint8_t ist, uint8_t type_attr) {
+    idt[vector].offset_low = handler & 0xFFFF;
+    idt[vector].offset_mid = (handler >> 16) & 0xFFFF;
+    idt[vector].offset_high = (handler >> 32) & 0xFFFFFFFF;
+    idt[vector].selector = 0x08;
+    idt[vector].ist = ist;
+    idt[vector].type_attr = type_attr;
+    idt[vector].reserved = 0;
 }
+
+namespace {
 
 extern "C" void exception_handler(InterruptFrame* frame) {
     klog("\n=== EXCEPTION ===\n");
@@ -199,39 +203,55 @@ EXCEPTION(31)
 
 } // namespace
 
+extern "C" {
+    void irq_stub_32(); void irq_stub_33(); void irq_stub_34(); void irq_stub_35();
+    void irq_stub_36(); void irq_stub_37(); void irq_stub_38(); void irq_stub_39();
+    void irq_stub_40(); void irq_stub_41(); void irq_stub_42(); void irq_stub_43();
+    void irq_stub_44(); void irq_stub_45(); void irq_stub_46(); void irq_stub_47();
+}
+
 void idt_init() {
-    set_entry(0, (uint64_t)&isr_exc0, 0, 0x8E);
-    set_entry(1, (uint64_t)&isr_exc1, 0, 0x8E);
-    set_entry(2, (uint64_t)&isr_exc2, 0, 0x8E);
-    set_entry(3, (uint64_t)&isr_exc3, 0, 0x8E);
-    set_entry(4, (uint64_t)&isr_exc4, 0, 0x8E);
-    set_entry(5, (uint64_t)&isr_exc5, 0, 0x8E);
-    set_entry(6, (uint64_t)&isr_exc6, 0, 0x8E);
-    set_entry(7, (uint64_t)&isr_exc7, 0, 0x8E);
-    set_entry(8, (uint64_t)&isr_exc8, 0, 0x8E);
-    set_entry(9, (uint64_t)&isr_exc9, 0, 0x8E);
-    set_entry(10, (uint64_t)&isr_exc10, 0, 0x8E);
-    set_entry(11, (uint64_t)&isr_exc11, 0, 0x8E);
-    set_entry(12, (uint64_t)&isr_exc12, 0, 0x8E);
-    set_entry(13, (uint64_t)&isr_exc13, 0, 0x8E);
-    set_entry(14, (uint64_t)&isr_exc14, 0, 0x8E);
-    set_entry(15, (uint64_t)&isr_exc15, 0, 0x8E);
-    set_entry(16, (uint64_t)&isr_exc16, 0, 0x8E);
-    set_entry(17, (uint64_t)&isr_exc17, 0, 0x8E);
-    set_entry(18, (uint64_t)&isr_exc18, 0, 0x8E);
-    set_entry(19, (uint64_t)&isr_exc19, 0, 0x8E);
-    set_entry(20, (uint64_t)&isr_exc20, 0, 0x8E);
-    set_entry(21, (uint64_t)&isr_exc21, 0, 0x8E);
-    set_entry(22, (uint64_t)&isr_exc22, 0, 0x8E);
-    set_entry(23, (uint64_t)&isr_exc23, 0, 0x8E);
-    set_entry(24, (uint64_t)&isr_exc24, 0, 0x8E);
-    set_entry(25, (uint64_t)&isr_exc25, 0, 0x8E);
-    set_entry(26, (uint64_t)&isr_exc26, 0, 0x8E);
-    set_entry(27, (uint64_t)&isr_exc27, 0, 0x8E);
-    set_entry(28, (uint64_t)&isr_exc28, 0, 0x8E);
-    set_entry(29, (uint64_t)&isr_exc29, 0, 0x8E);
-    set_entry(30, (uint64_t)&isr_exc30, 0, 0x8E);
-    set_entry(31, (uint64_t)&isr_exc31, 0, 0x8E);
+    idt_set_gate(0, (uint64_t)&isr_exc0, 0, 0x8E);
+    idt_set_gate(1, (uint64_t)&isr_exc1, 0, 0x8E);
+    idt_set_gate(2, (uint64_t)&isr_exc2, 0, 0x8E);
+    idt_set_gate(3, (uint64_t)&isr_exc3, 0, 0x8E);
+    idt_set_gate(4, (uint64_t)&isr_exc4, 0, 0x8E);
+    idt_set_gate(5, (uint64_t)&isr_exc5, 0, 0x8E);
+    idt_set_gate(6, (uint64_t)&isr_exc6, 0, 0x8E);
+    idt_set_gate(7, (uint64_t)&isr_exc7, 0, 0x8E);
+    idt_set_gate(8, (uint64_t)&isr_exc8, 0, 0x8E);
+    idt_set_gate(9, (uint64_t)&isr_exc9, 0, 0x8E);
+    idt_set_gate(10, (uint64_t)&isr_exc10, 0, 0x8E);
+    idt_set_gate(11, (uint64_t)&isr_exc11, 0, 0x8E);
+    idt_set_gate(12, (uint64_t)&isr_exc12, 0, 0x8E);
+    idt_set_gate(13, (uint64_t)&isr_exc13, 0, 0x8E);
+    idt_set_gate(14, (uint64_t)&isr_exc14, 0, 0x8E);
+    idt_set_gate(15, (uint64_t)&isr_exc15, 0, 0x8E);
+    idt_set_gate(16, (uint64_t)&isr_exc16, 0, 0x8E);
+    idt_set_gate(17, (uint64_t)&isr_exc17, 0, 0x8E);
+    idt_set_gate(18, (uint64_t)&isr_exc18, 0, 0x8E);
+    idt_set_gate(19, (uint64_t)&isr_exc19, 0, 0x8E);
+    idt_set_gate(20, (uint64_t)&isr_exc20, 0, 0x8E);
+    idt_set_gate(21, (uint64_t)&isr_exc21, 0, 0x8E);
+    idt_set_gate(22, (uint64_t)&isr_exc22, 0, 0x8E);
+    idt_set_gate(23, (uint64_t)&isr_exc23, 0, 0x8E);
+    idt_set_gate(24, (uint64_t)&isr_exc24, 0, 0x8E);
+    idt_set_gate(25, (uint64_t)&isr_exc25, 0, 0x8E);
+    idt_set_gate(26, (uint64_t)&isr_exc26, 0, 0x8E);
+    idt_set_gate(27, (uint64_t)&isr_exc27, 0, 0x8E);
+    idt_set_gate(28, (uint64_t)&isr_exc28, 0, 0x8E);
+    idt_set_gate(29, (uint64_t)&isr_exc29, 0, 0x8E);
+    idt_set_gate(30, (uint64_t)&isr_exc30, 0, 0x8E);
+    idt_set_gate(31, (uint64_t)&isr_exc31, 0, 0x8E);
+
+    // IRQ gates: vectors 32-47, interrupt gate (type_attr = 0x8E)
+    uint64_t stubs[] = {
+        (uint64_t)&irq_stub_32, (uint64_t)&irq_stub_33, (uint64_t)&irq_stub_34, (uint64_t)&irq_stub_35,
+        (uint64_t)&irq_stub_36, (uint64_t)&irq_stub_37, (uint64_t)&irq_stub_38, (uint64_t)&irq_stub_39,
+        (uint64_t)&irq_stub_40, (uint64_t)&irq_stub_41, (uint64_t)&irq_stub_42, (uint64_t)&irq_stub_43,
+        (uint64_t)&irq_stub_44, (uint64_t)&irq_stub_45, (uint64_t)&irq_stub_46, (uint64_t)&irq_stub_47,
+    };
+    for (int i = 0; i < 16; i++) idt_set_gate(32 + i, stubs[i], 0, 0x8E);
 
     idtr.limit = sizeof(IDTEntry) * IDT_ENTRIES - 1;
     idtr.base = (uint64_t)&idt[0];

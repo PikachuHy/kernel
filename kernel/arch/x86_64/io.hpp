@@ -45,4 +45,6 @@ inline uint32_t inl(uint16_t port) {
     return result;
 }
 
+inline void pause() { asm volatile("pause"); }
+
 } // namespace x86
