@@ -119,6 +119,34 @@ extern "C" void kernel_entry(void) {
     klog("  Free pages: "); klog_hex(bitmap_free_page_count()); klog("\n");
     klog("  Total pages: "); klog_hex(bitmap_total_page_count()); klog("\n");
 
+    // ── Bitmap demo ──
+    {
+        size_t free_before = bitmap_free_page_count();
+        klog("\n  [demo] Free before alloc: "); klog_hex(free_before); klog(" pages\n");
+
+        void* p1 = bitmap_alloc_page();
+        void* p2 = bitmap_alloc_page();
+        void* p3 = bitmap_alloc_page();
+
+        klog("  [demo] Allocated 3 pages:\n");
+        klog("    p1 = "); klog_hex(reinterpret_cast<uint64_t>(p1)); klog("\n");
+        klog("    p2 = "); klog_hex(reinterpret_cast<uint64_t>(p2)); klog("\n");
+        klog("    p3 = "); klog_hex(reinterpret_cast<uint64_t>(p3)); klog("\n");
+
+        size_t free_after = bitmap_free_page_count();
+        klog("  [demo] Free after  alloc: "); klog_hex(free_after); klog(" pages\n");
+
+        bitmap_free_page(p1);
+        bitmap_free_page(p2);
+        bitmap_free_page(p3);
+
+        size_t free_final = bitmap_free_page_count();
+        klog("  [demo] Free after  free:  "); klog_hex(free_final); klog(" pages\n");
+        klog("  [demo] Freed count matches: ");
+        klog(free_final == free_before ? "YES" : "NO");
+        klog("\n");
+    }
+
     // 3. Higher-half paging takeover
     klog("Setting up higher-half paging...\n");
     paging_init(hhdm, kernel_phys, kernel_virt, kernel_size);
@@ -131,6 +159,7 @@ extern "C" void kernel_entry(void) {
     klog("  Buddy/slab skipped (WIP)\n");
 
     klog("\n=== Kernel booted successfully ===\n");
+    klog("  (Ctrl+A then X to exit QEMU)\n");
 
     while (1) {
         asm volatile("hlt");
