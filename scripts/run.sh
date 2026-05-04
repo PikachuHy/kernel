@@ -33,6 +33,7 @@ hdiutil detach "$DISK_DEV" 2>/dev/null
 limine bios-install "$DISK_IMG"
 
 echo "==> Starting QEMU (serial only, no GUI)..."
+echo "    To exit: press Ctrl+A, then X"
 echo ""
 
 qemu-system-x86_64 \
