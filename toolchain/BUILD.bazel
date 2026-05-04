@@ -116,7 +116,7 @@ cc_toolchain_config(
         "gcc": "/usr/bin/clang",
         "g++": "/usr/bin/clang++",
         "cpp": "/usr/bin/clang++",
-        "ar": "/Users/pikachu/pr/kernel/.worktrees/phase2-mm/toolchain/ar-wrapper.sh",
+        "ar": "/Users/pikachu/pr/kernel/toolchain/ar-wrapper.sh",
         "nm": "/usr/local/opt/llvm/bin/llvm-nm",
         "ld": "/usr/bin/ld",
         "objcopy": "/usr/bin/objcopy",

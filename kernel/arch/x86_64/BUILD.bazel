@@ -1,5 +1,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
+exports_files(["irq.cpp", "irq.hpp"])
+
 cc_library(
     name = "arch",
     srcs = [
@@ -10,6 +12,8 @@ cc_library(
         "irq.cpp",
         "irq_stubs.S",
         "paging.cpp",
+        "syscall.cpp",
+        "syscall_entry.S",
         "timer.cpp",
     ],
     hdrs = [
@@ -19,6 +23,7 @@ cc_library(
         "io.hpp",
         "irq.hpp",
         "msr.hpp",
+        "syscall.hpp",
         "timer.hpp",
     ],
     deps = [

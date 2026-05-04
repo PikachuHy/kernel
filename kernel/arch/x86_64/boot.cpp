@@ -11,6 +11,10 @@
 #include "kernel/lib/klog.hpp"
 #include "kernel/lib/serial.hpp"
 #include "kernel/lib/panic.hpp"
+#include "kernel/arch/x86_64/apic.hpp"
+#include "kernel/arch/x86_64/irq.hpp"
+#include "kernel/arch/x86_64/timer.hpp"
+#include "kernel/arch/x86_64/syscall.hpp"
 
 static uint8_t boot_stack[65536];
 
@@ -198,10 +202,50 @@ extern "C" void kernel_entry(void) {
         klog("  [demo] All allocator tests passed\n\n");
     }
 
+    // ── Phase 3: APIC, Timer, Interrupts ──
+    klog("=== Phase 3: APIC + Timer + Interrupts ===\n\n");
+
+    klog("Disabling legacy PIC...\n");
+    pic_disable();
+
+    klog("Initializing LAPIC...\n");
+    lapic_init(hhdm);
+
+    klog("Initializing I/O APIC...\n");
+    ioapic_init(hhdm);
+
+    klog("Initializing IRQ dispatch...\n");
+    irq_init();
+
+    klog("Initializing timer...\n");
+    timer_init(hhdm);
+
+    klog("Initializing syscall...\n");
+    syscall_init();
+
+    // ── Timer demo: 3 periodic ticks ──
+    {
+        klog("\n  [demo] Periodic timer: 1 tick/sec, 3 ticks...\n");
+        static volatile int ticks = 0;
+        timer_periodic(1000000, [](uint64_t elapsed) -> bool {
+            ticks = ticks + 1;
+            klog("  [demo] Tick #");
+            klog_hex(ticks);
+            klog(" @ ");
+            klog_hex(elapsed);
+            klog(" ms\n");
+            return ticks < 3;
+        });
+
+        asm volatile("sti");
+        while (ticks < 3) asm volatile("pause");
+        asm volatile("cli");
+
+        klog("  [demo] Timer demo done (3 ticks fired)\n\n");
+    }
+
     klog("=== Kernel booted successfully ===\n");
     klog("  (Ctrl+A then X to exit QEMU)\n");
 
-    while (1) {
-        asm volatile("hlt");
-    }
+    while (1) { asm volatile("hlt"); }
 }
