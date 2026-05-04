@@ -25,7 +25,8 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 |-------|------|--------|
 | 1: Foundation | `docs/superpowers/plans/2026-05-02-phase-1-foundation.md` | Done |
 | 2: Memory Management | `docs/superpowers/plans/2026-05-02-phase-2-memory-management.md` | Done |
-| 3-10: Remaining | TBD | — |
+| 3: Interrupt + Timer | `docs/superpowers/plans/2026-05-05-phase-3-apic-timer.md` | Done |
+| 4-10: Remaining | TBD | — |
 
 ## Build / Test / Lint
 
@@ -33,8 +34,9 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 # Build kernel ELF
 bazel build //kernel:kernel
 
-# Run host-side unit tests (PMM, buddy, slab)
+# Run host-side unit tests (PMM, buddy, slab, IRQ)
 bazel test //test/mm:all
+bazel test //test/irq:all
 
 # Build and boot in QEMU (serial output, no GUI)
 bash scripts/run.sh
@@ -50,11 +52,13 @@ bash scripts/run.sh
 
 ```
 kernel/
-├── arch/x86_64/        # boot, gdt, idt, paging, linker script
+├── arch/x86_64/        # boot, gdt, idt, apic, ioapic, irq, timer, syscall, paging, linker script
 ├── core/mm/            # pmm, bitmap_alloc, buddy, slab, new_delete
 ├── lib/                # klog, panic, serial
 ├── BUILD.bazel
-test/mm/                # Host-side allocator tests (GTest)
+test/
+├── mm/                 # Host-side allocator tests (GTest)
+├── irq/                # Host-side IRQ dispatch tests (GTest)
 scripts/run.sh          # Build + QEMU boot
 third_party/limine/     # Limine protocol header
 ```

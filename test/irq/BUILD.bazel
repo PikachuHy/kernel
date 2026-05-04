@@ -1,0 +1,24 @@
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+
+cc_library(
+    name = "irq_host",
+    srcs = ["irq_host.cpp"],
+    hdrs = [
+        "//kernel/arch/x86_64:irq.hpp",
+    ],
+    includes = ["."],
+    deps = [
+        "//kernel/arch/x86_64:paging_hdrs",
+    ],
+)
+
+cc_test(
+    name = "irq_test",
+    size = "small",
+    srcs = ["irq_test.cpp"],
+    deps = [
+        ":irq_host",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
