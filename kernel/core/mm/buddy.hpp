@@ -6,10 +6,11 @@
 constexpr int BUDDY_MAX_ORDER = 10;  // 4KB * 2^10 = 4MB max block
 
 // Initialize the buddy allocator. Takes over physical page management
-// from the bitmap allocator. Must be called after the direct map is active
-// (paging_init has switched CR3).
-// hhdm_offset: 0 if direct map is active, or Limine HHDM for transitional use.
-void buddy_init(uint64_t hhdm_offset);
+// from the bitmap allocator. Must be called after paging_init.
+// hhdm_offset: Limine HHDM offset for phys-to-virt access.
+// page_array_phys: physical address where the Page metadata array is placed.
+//   Must NOT overlap kernel, bitmap, or page table pages.
+void buddy_init(uint64_t hhdm_offset, uint64_t page_array_phys);
 
 // Allocate 2^order contiguous physical pages. Returns physical address.
 // Pages are NOT zeroed. Returns nullptr on OOM.

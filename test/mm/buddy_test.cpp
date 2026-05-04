@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <stdlib.h>
+#include "kernel/core/mm/bitmap_alloc.hpp"
 #include "kernel/core/mm/buddy.hpp"
 #include "kernel/core/mm/pmm.hpp"
 
@@ -20,7 +21,9 @@ static void setup() {
         {SIM_PHYS_BASE, SIM_MEM_SIZE, MEMMAP_USABLE},
     };
     pmm_init(ranges, 1, 0, 0);
-    buddy_init(g_ts.hhdm_offset);
+    bitmap_init(g_ts.hhdm_offset, SIM_PHYS_BASE + 0x100000);  // bitmap at 1MB into sim
+    // Place Page array at 4MB into the simulated memory
+    buddy_init(g_ts.hhdm_offset, SIM_PHYS_BASE + 0x400000);
 }
 
 static void teardown() {

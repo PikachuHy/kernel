@@ -40,6 +40,12 @@ bazel test //test/mm:all
 bash scripts/run.sh
 ```
 
+## Known Issues
+
+- **paging_init**: CR3 reload causes triple-fault (root cause TBD). Kernel currently runs on Limine's page tables. Slab allocator accesses memory via Limine's HHDM.
+- **buddy allocator**: Implemented and host-tested, but not yet wired into kernel boot (slab uses bitmap_alloc directly as temporary backing).
+- **I/O ports**: No I/O permission bitmap in TSS — currently relying on IOPL=0 default.
+
 ## Architecture
 
 ```

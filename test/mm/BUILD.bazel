@@ -4,11 +4,13 @@ load("@rules_cc//cc:defs.bzl", "cc_test", "cc_library")
 cc_library(
     name = "mm_host",
     srcs = [
+        "//kernel/core/mm:bitmap_alloc.cpp",
         "//kernel/core/mm:buddy.cpp",
         "//kernel/core/mm:pmm.cpp",
         "//kernel/core/mm:slab.cpp",
     ],
     hdrs = [
+        "//kernel/core/mm:bitmap_alloc.hpp",
         "//kernel/core/mm:buddy.hpp",
         "//kernel/core/mm:pmm.hpp",
         "//kernel/core/mm:slab.hpp",

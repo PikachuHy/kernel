@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-exports_files(["buddy.cpp", "buddy.hpp", "pmm.cpp", "pmm.hpp", "slab.cpp", "slab.hpp"], visibility = ["//test:__subpackages__"])
+exports_files(["bitmap_alloc.cpp", "bitmap_alloc.hpp", "buddy.cpp", "buddy.hpp", "pmm.cpp", "pmm.hpp", "slab.cpp", "slab.hpp"], visibility = ["//test:__subpackages__"])
 
 cc_library(
     name = "mm",

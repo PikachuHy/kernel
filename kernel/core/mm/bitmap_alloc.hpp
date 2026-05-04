@@ -18,6 +18,9 @@ void* bitmap_alloc_page();
 // Free a single 4KB page.
 void bitmap_free_page(void* phys_addr);
 
+// Query whether a physical page is currently allocated.
+bool bitmap_is_allocated(uint64_t phys_addr);
+
 // Statistics
 size_t bitmap_free_page_count();
 size_t bitmap_total_page_count();

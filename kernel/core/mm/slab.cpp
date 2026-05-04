@@ -1,5 +1,5 @@
 #include "kernel/core/mm/slab.hpp"
-#include "kernel/core/mm/buddy.hpp"
+#include "kernel/core/mm/bitmap_alloc.hpp"
 #include "kernel/arch/x86_64/paging.hpp"
 
 namespace {
@@ -50,7 +50,7 @@ void cache_init(SlabCache* cache, size_t obj_size) {
 }
 
 bool slab_create(SlabCache* cache) {
-    void* page = buddy_alloc_pages(0);
+    void* page = bitmap_alloc_page();
     if (!page) return false;
 
     uint64_t phys = reinterpret_cast<uint64_t>(page);

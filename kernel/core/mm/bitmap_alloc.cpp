@@ -106,6 +106,12 @@ void bitmap_free_page(void* phys_addr) {
     }
 }
 
+bool bitmap_is_allocated(uint64_t phys_addr) {
+    size_t idx = phys_to_idx(phys_addr);
+    if (idx >= g_total_pages) return true;  // out of range = considered allocated
+    return bit_test(g_bitmap, idx);
+}
+
 size_t bitmap_free_page_count() {
     size_t free = 0;
     for (size_t i = 0; i < g_total_pages; i++) {
