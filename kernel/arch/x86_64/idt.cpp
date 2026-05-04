@@ -78,7 +78,13 @@ extern "C" void exception_handler(InterruptFrame* frame) {
     klog_hex(frame->err_code);
     klog("\nRIP: ");
     klog_hex(frame->rip);
-    klog("\n");
+    if (frame->int_no == 14) {
+        uint64_t cr2;
+        asm volatile("mov %%cr2, %0" : "=r"(cr2));
+        klog("CR2 (fault addr): ");
+        klog_hex(cr2);
+        klog("\n");
+    }
 
     while (1) {
         asm volatile("cli; hlt");

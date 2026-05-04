@@ -5,6 +5,7 @@ cc_binary(
     deps = [
         "//kernel/arch/x86_64:arch",
         "//kernel/lib:klib",
+        "//kernel/core/mm:mm",
     ],
     additional_linker_inputs = ["//kernel/arch/x86_64:linker_script"],
     linkopts = ["-Wl,-T,$(location //kernel/arch/x86_64:linker_script)"],

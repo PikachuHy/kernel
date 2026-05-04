@@ -6,15 +6,23 @@ cc_library(
         "boot.cpp",
         "gdt.cpp",
         "idt.cpp",
+        "paging.cpp",
     ],
     hdrs = [
         "gdt.hpp",
         "idt.hpp",
     ],
     deps = [
+        "//kernel/core/mm:mm",
         "//kernel/lib:klib",
         "//third_party/limine:limine",
     ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "paging_hdrs",
+    hdrs = ["paging.hpp"],
     visibility = ["//visibility:public"],
 )
 

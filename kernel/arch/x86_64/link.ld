@@ -38,6 +38,8 @@ SECTIONS
         *(.bss .bss.*)
     } :rw
 
+    _end = .;
+
     /DISCARD/ : {
         *(.eh_frame)
         *(.note .note.*)

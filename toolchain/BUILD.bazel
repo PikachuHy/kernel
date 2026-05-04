@@ -98,3 +98,76 @@ toolchain(
     toolchain = ":x86_64_elf_cc_toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
+
+# --- Host (macOS) toolchain for unit tests ---
+
+cc_toolchain_config(
+    name = "host_config",
+    compiler = "clang",
+    toolchain_identifier = "host-clang",
+    host_system_name = "x86_64-darwin",
+    target_system_name = "x86_64-apple-darwin",
+    target_libc = "macosx",
+    abi_version = "darwin",
+    abi_libc_version = "macosx",
+    target_cpu = "x86_64",
+    builtin_sysroot = "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk",
+    tool_paths = {
+        "gcc": "/usr/bin/clang",
+        "g++": "/usr/bin/clang++",
+        "cpp": "/usr/bin/clang++",
+        "ar": "/Users/pikachu/pr/kernel/.worktrees/phase2-mm/toolchain/ar-wrapper.sh",
+        "nm": "/usr/local/opt/llvm/bin/llvm-nm",
+        "ld": "/usr/bin/ld",
+        "objcopy": "/usr/bin/objcopy",
+        "objdump": "/usr/local/opt/llvm/bin/llvm-objdump",
+        "strip": "/usr/bin/strip",
+    },
+    cxx_builtin_include_directories = [
+        "/Library/Developer/CommandLineTools/usr/lib/clang/17/include",
+        "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include",
+        "/Library/Developer/CommandLineTools/usr/include",
+        "/usr/local/include",
+    ],
+    compile_flags = [
+        "-std=c++26",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-c99-designator",
+        "-Wno-sign-compare",
+    ],
+    dbg_compile_flags = ["-g", "-O0"],
+    opt_compile_flags = ["-O2", "-DNDEBUG"],
+    cxx_flags = [],
+    link_flags = [],
+    dbg_link_flags = [],
+    opt_link_flags = [],
+)
+
+cc_toolchain(
+    name = "host_cc_toolchain",
+    all_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    supports_param_files = 0,
+    toolchain_config = ":host_config",
+    toolchain_identifier = "host-clang",
+)
+
+toolchain(
+    name = "host_toolchain",
+    exec_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:osx",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:osx",
+    ],
+    toolchain = ":host_cc_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)

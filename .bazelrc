@@ -1,4 +1,8 @@
 build --incompatible_strict_action_env
 build --verbose_failures
-build --platforms=//:x86_64_none
 test --test_output=errors
+
+# Cross-compilation for kernel
+build --platforms=//:x86_64_none
+# Use host (macOS) platform for tests so they can run natively
+test --platforms=//:x86_64_macos

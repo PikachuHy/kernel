@@ -9,7 +9,7 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 ## Key Decisions
 
 - **Architecture:** Object-based hybrid kernel (Approach B in design spec)
-- **Bootloader:** Limine (stivale2 protocol)
+- **Bootloader:** Limine (native protocol)
 - **Build system:** Bazel 9 with MODULE.bazel
 - **Dev host:** macOS with LLVM/Clang cross-compilation to `x86_64-unknown-elf`
 - **C++:** Freestanding C++26 — no exceptions (kernel panics on throw), no RTTI except for Object Manager type checking
@@ -23,10 +23,32 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 
 | Phase | Plan | Status |
 |-------|------|--------|
-| 1: Foundation | `docs/superpowers/plans/2026-05-02-phase-1-foundation.md` | Ready |
-| 2: Memory Management | TBD | — |
+| 1: Foundation | `docs/superpowers/plans/2026-05-02-phase-1-foundation.md` | Done |
+| 2: Memory Management | `docs/superpowers/plans/2026-05-02-phase-2-memory-management.md` | Done |
 | 3-10: Remaining | TBD | — |
 
 ## Build / Test / Lint
 
-Not yet configured in tree. Phase 1 sets up the Bazel cross-compilation toolchain. See the Phase 1 plan for build commands.
+```bash
+# Build kernel ELF
+bazel build //kernel:kernel
+
+# Run host-side unit tests (PMM, buddy, slab)
+bazel test //test/mm:all
+
+# Build and boot in QEMU (serial output, no GUI)
+bash scripts/run.sh
+```
+
+## Architecture
+
+```
+kernel/
+├── arch/x86_64/        # boot, gdt, idt, paging, linker script
+├── core/mm/            # pmm, bitmap_alloc, buddy, slab, new_delete
+├── lib/                # klog, panic, serial
+├── BUILD.bazel
+test/mm/                # Host-side allocator tests (GTest)
+scripts/run.sh          # Build + QEMU boot
+third_party/limine/     # Limine protocol header
+```

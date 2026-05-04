@@ -15,6 +15,15 @@
 #define LIMINE_MEMMAP_REQUEST_ID \
     0x67cf3d9d378a806f, 0xe304acdfc50c3c62
 
+#define LIMINE_HHDM_REQUEST_ID \
+    0x48dcf1cb8ad2b852, 0x63984e959a98244b
+
+#define LIMINE_KERNEL_ADDRESS_REQUEST_ID \
+    0x3f34bfd0e3a0c2db, 0xa79e6e729c67f47e
+
+#define LIMINE_KERNEL_FILE_REQUEST_ID \
+    0xad97e90e83f1ed67, 0x31eb5d1c5ff23b69
+
 struct limine_uuid {
     uint32_t a;
     uint16_t b;

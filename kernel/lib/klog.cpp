@@ -164,14 +164,26 @@ void newline() {
 
 } // namespace
 
+// Physical framebuffer address saved for re-init after direct map is active
+static uint64_t fb_phys_addr = 0;
+
 void klog_init(limine_framebuffer* framebuffer) {
     if (framebuffer) {
+        fb_phys_addr = framebuffer->address;
         fb.addr = (uint8_t*)framebuffer->address;
         fb.width = framebuffer->width;
         fb.height = framebuffer->height;
         fb.pitch = framebuffer->pitch;
         fb.bpp = framebuffer->bpp;
     }
+}
+
+// Call after direct map is active to convert fb.addr from physical to virtual.
+void klog_reinit_fb(uint64_t fb_phys) {
+    if (fb_phys) {
+        fb.addr = (uint8_t*)(0xFFFF800000000000ULL + fb_phys);
+    }
+    (void)fb_phys_addr;
 }
 
 void klog_putc(char c) {

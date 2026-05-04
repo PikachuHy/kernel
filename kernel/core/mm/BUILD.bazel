@@ -1,0 +1,25 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+exports_files(["buddy.cpp", "buddy.hpp", "pmm.cpp", "pmm.hpp", "slab.cpp", "slab.hpp"], visibility = ["//test:__subpackages__"])
+
+cc_library(
+    name = "mm",
+    srcs = [
+        "bitmap_alloc.cpp",
+        "buddy.cpp",
+        "new_delete.cpp",
+        "pmm.cpp",
+        "slab.cpp",
+    ],
+    hdrs = [
+        "bitmap_alloc.hpp",
+        "buddy.hpp",
+        "pmm.hpp",
+        "slab.hpp",
+    ],
+    deps = [
+        "//kernel/arch/x86_64:paging_hdrs",
+        "//kernel/lib:klib",
+    ],
+    visibility = ["//visibility:public"],
+)

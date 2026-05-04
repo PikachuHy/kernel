@@ -32,13 +32,11 @@ hdiutil detach "$DISK_DEV" 2>/dev/null
 # Install Limine BIOS bootloader
 limine bios-install "$DISK_IMG"
 
-echo "==> Starting QEMU..."
-echo "    Kernel output appears in the QEMU window (framebuffer)"
-echo "    and on this terminal (serial port)."
+echo "==> Starting QEMU (serial only, no GUI)..."
 echo ""
 
 qemu-system-x86_64 \
     -drive file="$DISK_IMG",format=raw,if=ide \
     -m 512M \
-    -serial stdio \
+    -nographic \
     -no-reboot
