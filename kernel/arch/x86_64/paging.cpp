@@ -92,12 +92,6 @@ bool map_4k_pages(PageTable* pml4_phys, uint64_t va, uint64_t pa, uint64_t size,
 
 } // namespace
 
-// Set up higher-half kernel mapping by modifying Limine's PML4 in-place.
-// Builds our page tables (PDPT/PD/PT) at fresh low-memory pages, then
-// atomically replaces the kernel PML4 entry. Limine's HHDM and identity
-// mappings are preserved. TLB is not flushed (CR3 reload triple-faults
-// for unknown reasons) — stale TLB entries from Limine are still valid
-// since our mapping is equivalent.
 void paging_init(
     uint64_t hhdm,
     uint64_t kernel_phys_base,
@@ -106,30 +100,37 @@ void paging_init(
 {
     g_hhdm = hhdm;
 
-    // Get Limine's PML4
+    // Get Limine's PML4 (currently active)
     uint64_t cr3;
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
     PageTable* pml4 = static_cast<PageTable*>(early_phys_to_virt(cr3));
 
-    // Build kernel mapping using a temporary PML4 (so map_4k_pages
-    // allocates fresh PDPT/PD/PT at low addresses).
+    // Allocate a temporary PML4 and copy ALL 512 entries from Limine's PML4.
+    // This preserves the HHDM direct-map (0xFFFF800000000000) and identity
+    // (0x0) mappings that Limine set up, so after the CR3 reload we can
+    // still access all physical memory and execute in the higher half.
     PageTable* tmp_pml4 = alloc_table();
     if (!tmp_pml4) {
         while (1) asm volatile("cli; hlt");
     }
     uint64_t* tmp_virt = static_cast<uint64_t*>(early_phys_to_virt(
         reinterpret_cast<uint64_t>(tmp_pml4)));
-    for (int i = 0; i < 512; i++) tmp_virt[i] = 0;
+    for (int i = 0; i < 512; i++) {
+        tmp_virt[i] = pml4->entries[i];
+    }
 
+    // Build kernel 4K-page mapping into the temporary PML4 (overwrites the
+    // kernel entry we copied from Limine, but with our own page tables
+    // allocated at fresh low-memory pages).
     uint64_t kernel_pages_4k = (kernel_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     if (!map_4k_pages(tmp_pml4, kernel_virt_base, kernel_phys_base, kernel_pages_4k, 0)) {
         while (1) asm volatile("cli; hlt");
     }
 
-    // Replace Limine's kernel PML4 entry with ours (atomic 8-byte write).
-    uint16_t ki4 = pml4_index(kernel_virt_base);
-    pml4->entries[ki4] = tmp_virt[ki4];
+    // Reload CR3 with the temporary PML4. All Limine mappings are preserved
+    // (copied above), so this is safe.
+    uint64_t new_cr3 = reinterpret_cast<uint64_t>(tmp_pml4);
+    asm volatile("mov %0, %%cr3" :: "r"(new_cr3) : "memory");
 
-    // Limine's HHDM (0xFFFF800000000000) and identity (0x0) entries are
-    // preserved. TLB lazily transitions to our mapping over time.
+    klog("Paging: CR3 reloaded\n");
 }
