@@ -19,6 +19,12 @@
 #include "kernel/arch/x86_64/io.hpp"
 #include "kernel/arch/x86_64/acpi.hpp"
 #include "kernel/arch/x86_64/smp.hpp"
+#include "kernel/core/object/handle_table.hpp"
+#include "kernel/core/object/channel.hpp"
+#include "kernel/core/object/port.hpp"
+
+// Placement new (defined in kernel/core/object/port.cpp — re-declared here for boot.cpp's usage)
+void* operator new(size_t, void* p) noexcept;
 
 static uint8_t boot_stack[65536];
 
@@ -295,6 +301,80 @@ extern "C" void kernel_entry(void) {
 
     if (t_a) thread_start(t_a);
     if (t_b) thread_start(t_b);
+
+    // ── Phase 6: Object Manager + IPC demo ──
+    Thread* ipc_server = thread_create([](){
+        Port* port = static_cast<Port*>(kmalloc(sizeof(Port)));
+        new (port) Port();
+        handle_t port_h = handle_alloc(port,
+            Rights{.mask = Rights::Read | Rights::Write | Rights::Duplicate | Rights::Transfer});
+        (void)port_h;
+        port->Release();
+
+        port_register_name("demo", port);
+
+        klog("[ipc-server] Port 'demo' registered, waiting for connections...\n");
+
+        while (1) {
+            handle_t client_chan;
+            if (port->Accept(&client_chan) == 0) {
+                klog("[ipc-server] Client connected\n");
+
+                char buf[128] = {};
+                for (size_t i = 0; i < sizeof(buf); i++) buf[i] = 0;
+                size_t len = 0;
+                int rc;
+                while ((rc = static_cast<Channel*>(
+                    handle_lookup(client_chan, Rights{.mask = Rights::Read}))
+                    ->Read(buf, sizeof(buf), &len, nullptr, 0, nullptr)) == -2) {
+                    thread_yield();
+                }
+
+                klog("[ipc-server] Got message: '");
+                klog(buf);
+                klog("'\n");
+
+                const char* ack = "ACK from server";
+                static_cast<Channel*>(
+                    handle_lookup(client_chan, Rights{.mask = Rights::Write}))
+                    ->Write(ack, 15, nullptr, 0);
+
+                handle_free(client_chan);
+            }
+        }
+    }, "ipc-server", 1);
+
+    Thread* ipc_client = thread_create([](){
+        Port* port = nullptr;
+        while (!(port = port_lookup_name("demo"))) {
+            thread_yield();
+        }
+
+        handle_t my_chan;
+        Port::Connect(port, &my_chan);
+        klog("[ipc-client] Connected to 'demo'\n");
+
+        const char* msg = "hello kernel IPC!";
+        static_cast<Channel*>(
+            handle_lookup(my_chan, Rights{.mask = Rights::Write}))
+            ->Write(msg, 18, nullptr, 0);
+
+        char reply[64] = {};
+        size_t len = 0;
+        int rc;
+        while ((rc = static_cast<Channel*>(
+            handle_lookup(my_chan, Rights{.mask = Rights::Read}))
+            ->Read(reply, sizeof(reply), &len, nullptr, 0, nullptr)) == -2) {
+            thread_yield();
+        }
+
+        klog("[ipc-client] Reply: '");
+        klog(reply);
+        klog("'\n");
+    }, "ipc-client", 2);
+
+    if (ipc_server) thread_start(ipc_server);
+    if (ipc_client) thread_start(ipc_client);
 
     // Hook timer to scheduler for preemption (every 10ms)
     timer_periodic(10000, timer_preempt_callback);
