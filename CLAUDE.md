@@ -28,6 +28,7 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 | 3: Interrupt + Timer | `docs/superpowers/plans/2026-05-05-phase-3-apic-timer.md` | Done |
 | 4: SMP | `docs/superpowers/plans/2026-05-05-phase-4-smp.md` | Done |
 | 5: Scheduler | `docs/superpowers/plans/2026-05-05-phase-5-scheduler.md` | Done |
+| 6: Object Manager + IPC | `docs/superpowers/plans/2026-05-05-phase-6-object-ipc.md` | Done |
 
 ## Build / Test / Lint
 
@@ -38,6 +39,8 @@ bazel build //kernel:kernel
 # Run host-side unit tests (PMM, buddy, slab, IRQ)
 bazel test //test/mm:all
 bazel test //test/irq:all
+bazel test //test/sched:all
+bazel test //test/object:all
 
 # Build and boot in QEMU (serial output, no GUI)
 bash scripts/run.sh
@@ -48,6 +51,7 @@ bash scripts/run.sh
 - **paging_init**: CR3 reload causes triple-fault (root cause TBD). Kernel currently runs on Limine's page tables. Slab allocator accesses memory via Limine's HHDM.
 - **buddy allocator**: Implemented and host-tested, but not yet wired into kernel boot (slab uses bitmap_alloc directly as temporary backing).
 - **I/O ports**: No I/O permission bitmap in TSS — currently relying on IOPL=0 default.
+- **Handle table**: Currently global (1024 handles, spinlock-protected). Moves to per-process handle tables in Phase 7 (VMM + Process objects).
 
 ## Architecture
 
@@ -56,12 +60,15 @@ kernel/
 ├── arch/x86_64/        # boot, gdt, idt, apic, ioapic, irq, acpi, smp, trampoline, timer, syscall, paging, linker script
 ├── core/
 │   ├── mm/             # pmm, bitmap_alloc, buddy, slab, new_delete
-│   └── sched/          # scheduler — thread, run queue, context switch
-├── lib/                # klog, panic, serial
+│   ├── sched/          # scheduler — thread, run queue, context switch
+│   └── object/         # KernelObject, handle table, rights, channel, port
+├── lib/                # klog, panic, serial, spinlock
 ├── BUILD.bazel
 test/
 ├── mm/                 # Host-side allocator tests (GTest)
 ├── irq/                # Host-side IRQ dispatch tests (GTest)
+├── sched/              # Host-side scheduler tests (GTest)
+├── object/             # Host-side object/IPC tests (GTest)
 scripts/run.sh          # Build + QEMU boot
 third_party/limine/     # Limine protocol header
 ```
