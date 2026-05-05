@@ -34,6 +34,9 @@ void spinlock_release(Spinlock* lock) {
 alignas(16) static uint8_t ap_stacks[MAX_CPUS][65536];
 static uint64_t g_smp_hhdm = 0;
 
+// Log lock — serializes klog/serial output across CPUs
+static Spinlock g_log_lock;
+
 // Compute trampoline symbol offsets and patch data fields.
 static void patch_trampoline_data(uint64_t tramp_phys, uint64_t cr3) {
     uint8_t* tramp_virt = reinterpret_cast<uint8_t*>(g_smp_hhdm + tramp_phys);
@@ -149,14 +152,20 @@ uint32_t smp_init(uint64_t hhdm, uint64_t rsdp_phys) {
 
         if (g_per_cpu[i].online) {
             g_cpu_count++;
-            klog("SMP: CPU "); klog_hex(i); klog(" online (LAPIC ID=");
-            klog_hex(cpus[i].lapic_id); klog(")\n");
+            {
+                ScopedSpinlock guard(g_log_lock);
+                klog("SMP: CPU "); klog_hex(i); klog(" online (LAPIC ID=");
+                klog_hex(cpus[i].lapic_id); klog(")\n");
+            }
         } else {
             klog("SMP: CPU "); klog_hex(i); klog(" FAILED to come online\n");
         }
     }
 
-    klog("SMP: "); klog_hex(g_cpu_count); klog(" CPU(s) online\n");
+    {
+        ScopedSpinlock guard(g_log_lock);
+        klog("SMP: "); klog_hex(g_cpu_count); klog(" CPU(s) online\n");
+    }
     return g_cpu_count;
 }
 
@@ -171,15 +180,21 @@ extern "C" void smp_ap_entry(uint64_t id) {
     // Load AP's own GDTR (GDT table shared, but GDTR is per-CPU register)
     gdt_init();
 
-    // Enable this AP's local APIC
-    lapic_init(g_smp_hhdm);
+    // Enable this AP's local APIC (locked: lapic_init prints to klog)
+    {
+        ScopedSpinlock guard(g_log_lock);
+        lapic_init(g_smp_hhdm);
+    }
 
     // Mark online
     g_per_cpu[cpu_id].cpu_id   = cpu_id;
     g_per_cpu[cpu_id].lapic_id = lapic_id;
     g_per_cpu[cpu_id].online   = true;
 
-    klog("AP "); klog_hex(cpu_id); klog(" online\n");
+    {
+        ScopedSpinlock guard(g_log_lock);
+        klog("AP "); klog_hex(cpu_id); klog(" online\n");
+    }
 
     // Park in idle loop
     asm volatile("sti");
