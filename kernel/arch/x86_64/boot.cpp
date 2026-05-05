@@ -113,6 +113,9 @@ extern "C" void kernel_entry(void) {
     gdt_init();
     klog("GDT initialized.\n");
 
+    klog("Initializing TSS...\n");
+    tss_init();
+
     klog("Initializing IDT...\n");
     idt_init();
     klog("IDT initialized.\n");

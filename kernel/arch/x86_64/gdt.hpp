@@ -18,3 +18,4 @@ struct GDTR {
 } __attribute__((packed));
 
 void gdt_init();
+void tss_init();

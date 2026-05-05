@@ -1,4 +1,7 @@
 #include "kernel/arch/x86_64/gdt.hpp"
+#include <stddef.h>
+#include "kernel/arch/x86_64/paging.hpp"
+#include "kernel/lib/klog.hpp"
 
 namespace {
 
@@ -17,6 +20,21 @@ void set_entry(int idx, uint32_t base, uint32_t limit, uint8_t access, uint8_t f
 }
 
 } // namespace
+
+struct TSS {
+    uint32_t reserved0;
+    uint64_t rsp0;
+    uint64_t rsp1;
+    uint64_t rsp2;
+    uint64_t reserved1;
+    uint64_t ist[7];
+    uint64_t reserved2;
+    uint16_t reserved3;
+    uint16_t io_bitmap_offset;
+} __attribute__((packed));
+
+static uint8_t g_tss_data[sizeof(TSS) + 8192 + 1]
+    __attribute__((aligned(PAGE_SIZE)));
 
 void gdt_init() {
     // 0: null
@@ -52,4 +70,31 @@ void gdt_init() {
         : "r"(&gdtr)
         : "rax", "memory"
     );
+}
+
+void tss_init() {
+    TSS* tss = reinterpret_cast<TSS*>(&g_tss_data[0]);
+    for (size_t i = 0; i < sizeof(TSS); i++) {
+        reinterpret_cast<uint8_t*>(tss)[i] = 0;
+    }
+    tss->io_bitmap_offset = sizeof(TSS);
+
+    uint8_t* bitmap = &g_tss_data[sizeof(TSS)];
+    for (int i = 0; i < 8192; i++) bitmap[i] = 0xFF;
+    g_tss_data[sizeof(g_tss_data) - 1] = 0xFF;
+
+    uint64_t tss_addr = reinterpret_cast<uint64_t>(tss);
+    uint64_t limit = sizeof(g_tss_data) - 1;
+
+    set_entry(5, tss_addr & 0xFFFFFFFF, limit & 0xFFFFF, 0x89, 0);
+    set_entry(6, (tss_addr >> 32) & 0xFFFFFFFF, 0, 0, 0);
+
+    asm volatile(
+        "ltr %%ax\n"
+        :
+        : "a"(0x28)
+        : "memory"
+    );
+
+    klog("TSS: loaded (I/O bitmap: all ports denied from ring 3)\n");
 }
