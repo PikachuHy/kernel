@@ -10,3 +10,14 @@ cc_test(
         "@com_google_googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "channel_test",
+    size = "small",
+    srcs = ["channel_test.cpp"],
+    deps = [
+        "//kernel/core/object:object_hdrs",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
