@@ -241,6 +241,24 @@ extern "C" void kernel_entry(void) {
     klog("  Press keys to see scancodes via IRQ1 dispatch.\n");
     klog("  ================================================\n\n");
 
+    // ── Initialize PS/2 keyboard controller ──
+    // The 8042 controller at ports 0x60/0x64 must be told to enable the
+    // keyboard port and start scanning, otherwise IRQ1 never fires.
+    {
+        // Wait for input buffer empty, then enable first PS/2 port
+        while (x86::inb(0x64) & 2) x86::pause();
+        x86::outb(0x64, 0xAE);  // "Enable First PS/2 Port"
+
+        // Flush any stale output buffer data
+        while (x86::inb(0x64) & 1) { (void)x86::inb(0x60); }
+
+        // Tell keyboard to start scanning
+        while (x86::inb(0x64) & 2) x86::pause();
+        x86::outb(0x60, 0xF4);  // "Enable Scanning"
+
+        klog("  PS/2 keyboard: enabled\n\n");
+    }
+
     // Track demo state (non-volatile; memory barrier in loop ensures visibility)
     static int  timer_ticks = 0;
     static char last_scancode = 0;
