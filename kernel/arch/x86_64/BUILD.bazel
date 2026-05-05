@@ -33,6 +33,7 @@ cc_library(
     ],
     deps = [
         "//kernel/core/mm:mm",
+        "//kernel/core/object:object",
         "//kernel/core/sched:sched_hdrs",
         "//kernel/lib:klib",
         "//third_party/limine:limine",
