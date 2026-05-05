@@ -13,6 +13,12 @@ constexpr uint16_t LAPIC_EOI         = 0x0B0;
 constexpr uint16_t LAPIC_SVR         = 0x0F0;
 constexpr uint16_t LAPIC_ICR_LO      = 0x300;
 constexpr uint16_t LAPIC_ICR_HI      = 0x310;
+
+constexpr uint32_t ICR_INIT     = 0x00004500;
+constexpr uint32_t ICR_STARTUP  = 0x00004600;
+constexpr uint32_t ICR_ASSERT   = 0x00004000;
+constexpr uint32_t ICR_LEVEL    = 0x00008000;
+
 constexpr uint16_t LAPIC_LVT_TIMER   = 0x320;
 constexpr uint16_t LAPIC_LVT_LINT0   = 0x350;
 constexpr uint16_t LAPIC_LVT_LINT1   = 0x360;
@@ -43,6 +49,9 @@ void lapic_init(uint64_t hhdm);
 void lapic_eoi();
 uint32_t lapic_read(uint16_t offset);
 void lapic_write(uint16_t offset, uint32_t value);
+void lapic_send_ipi(uint32_t lapic_id, uint32_t icr_lo);
+void lapic_send_init(uint32_t lapic_id);
+void lapic_send_sipi(uint32_t lapic_id, uint8_t vector);
 bool apic_is_ready();
 
 void ioapic_init(uint64_t hhdm);

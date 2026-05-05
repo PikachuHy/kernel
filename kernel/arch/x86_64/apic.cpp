@@ -92,6 +92,31 @@ void ioapic_init(uint64_t hhdm) {
     klog("IOAPIC: IRQ1->v33 routed\n");
 }
 
+void lapic_send_ipi(uint32_t lapic_id, uint32_t icr_lo) {
+    lapic_write(LAPIC_ICR_HI, lapic_id << 24);
+    lapic_write(LAPIC_ICR_LO, icr_lo);
+    // Wait for delivery with timeout (~10ms)
+    for (int i = 0; i < 10000000; i++) {
+        if (!(lapic_read(LAPIC_ICR_LO) & (1 << 12))) break;
+        asm volatile("pause" ::: "memory");
+    }
+}
+
+void lapic_send_init(uint32_t lapic_id) {
+    lapic_send_ipi(lapic_id, ICR_INIT | ICR_ASSERT | ICR_LEVEL);
+    for (int i = 0; i < 10000000; i++) {
+        asm volatile("pause" ::: "memory");
+    }
+    lapic_send_ipi(lapic_id, ICR_INIT | ICR_LEVEL);
+    for (int i = 0; i < 10000000; i++) {
+        asm volatile("pause" ::: "memory");
+    }
+}
+
+void lapic_send_sipi(uint32_t lapic_id, uint8_t vector) {
+    lapic_send_ipi(lapic_id, ICR_STARTUP | vector);
+}
+
 void ioapic_route_irq(uint8_t irq, uint8_t vector, uint8_t lapic_id) {
     uint8_t lo = IOAPIC_REDTBL + 2 * irq;
     ioapic_write(lo, vector);  // fixed delivery, physical dest, unmasked

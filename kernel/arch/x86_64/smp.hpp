@@ -34,9 +34,11 @@ struct ScopedSpinlock {
 extern PerCpu g_per_cpu[MAX_CPUS];
 extern uint32_t g_cpu_count;
 
-// SMP init — called by BSP after Phase 3 setup.
-// Parameters and return type TBD in Task 4.
-uint32_t smp_init();
+// SMP init — called by BSP after memory, APIC, and timer are set up.
+// hhdm: Limine HHDM offset for physical memory access
+// rsdp_phys: physical address of ACPI RSDP (from Limine rsdp_request)
+// Returns number of CPUs successfully brought online (including BSP).
+uint32_t smp_init(uint64_t hhdm, uint64_t rsdp_phys);
 
 uint32_t smp_cpu_count();
 

@@ -1,18 +1,17 @@
 # kernel/arch/x86_64/trampoline.S
 #
 # AP startup trampoline: transitions from 16-bit real mode to 64-bit long
-# mode.  Copied to a physical page below 1 MiB by smp_init(), after which
-# APs are started via SIPI(vector).  Fully position-independent — works at
-# any physical address.
+# mode.  Copied to a physical page below 1 MiB by smp_init().  Fully
+# position-independent.
 #
 # Flow:
-#   16-bit real mode (entry after SIPI)
-#     -> load GDT (base patched by smp_init)
+#   16-bit real mode (entry after SIPI, CS = vector * 0x100)
+#     -> load GDT (GDTR patched by smp_init)
 #     -> enter protected mode (CR0.PE)
 #     -> 32-bit protected mode
 #        -> enable PAE (CR4.PAE)
-#        -> load shared kernel page tables (CR3)
-#        -> enable long mode (EFER.LME)
+#        -> load shared kernel page tables (CR3, patched by smp_init)
+#        -> enable long mode + NXE (EFER.LME | EFER.NXE)
 #        -> enable paging (CR0.PG)
 #     -> 64-bit long mode
 #        -> call smp_ap_entry(cpu_id | (lapic_id << 32))
@@ -24,45 +23,48 @@
 .globl tr_cr3
 .globl tr_entry
 .globl tr_id
+.globl tr_gdt
 .globl tr_gdtr
 
 .code16
 
-# ── Trampoline data ──────────────────────────────────────────────────
-# These fields sit at a fixed offset from the page start so that both
-# 16-bit real-mode code (base-relative via CS) and 64-bit code
-# (RIP-relative) can locate them.
+# ── Trampoline data (patched by smp_init at runtime) ──
 trampoline_start:
     jmp real_start
 
 .align 8
-tr_cr3:   .quad 0    # physical address of top-level page table
-tr_entry: .quad 0    # smp_ap_entry function pointer (64-bit)
-tr_id:    .quad 0    # arg: low32 = cpu_id, high32 = lapic_id
+tr_cr3:   .quad 0               # CR3 value
+tr_entry: .quad 0               # smp_ap_entry function pointer
+tr_id:    .quad 0               # cpu_id (low 32) | lapic_id (high 32)
 
 .align 16
 tr_gdt:
 tr_gdt_null:   .quad 0
-tr_gdt_code16: .quad 0x00009a000000ffff   # 16-bit code,  base=0 limit=4G
-tr_gdt_data16: .quad 0x000092000000ffff   # 16-bit data,  base=0 limit=4G
-tr_gdt_code32: .quad 0x00cf9a000000ffff   # 32-bit code,  D=1
-tr_gdt_data32: .quad 0x00cf92000000ffff   # 32-bit data,  D=1
-tr_gdt_code64: .quad 0x00209a0000000000   # 64-bit code,  L=1 D=0
-tr_gdt_data64: .quad 0x0000920000000000   # 64-bit data
+tr_gdt_code16: .quad 0x00009a000000ffff
+tr_gdt_data16: .quad 0x000092000000ffff
+tr_gdt_code32: .quad 0x00cf9a000000ffff
+tr_gdt_data32: .quad 0x00cf92000000ffff
+tr_gdt_code64: .quad 0x00209a0000000000
+tr_gdt_data64: .quad 0x0000920000000000
 tr_gdt_end:
 
 .align 4
 tr_gdtr:
-    .word tr_gdt_end - tr_gdt - 1    # GDT limit
-    .long 0                           # GDT base (patched by smp_init)
+    .word tr_gdt_end - tr_gdt - 1   # limit = 55
+    .long 0                          # base (patched by smp_init)
 
 # ── 16-bit real mode entry ──────────────────────────────────────────
 real_start:
     cli
     cld
 
-    # SIPI sets CS = vector * 0x100, giving physical base = vector * 0x1000.
-    # Copy CS to DS/ES/SS so that data segment addressing is consistent.
+    # Compute physical base from CS (CS << 4).
+    movw %cs, %ax
+    movzwl %ax, %eax
+    shll $4, %eax                # eax = physical base
+    movl %eax, %ebp              # ebp = physical base (saved)
+
+    # Copy CS to DS/ES/SS for consistent segment addressing.
     movw %cs, %ax
     movw %ax, %ds
     movw %ax, %es
@@ -71,79 +73,83 @@ real_start:
     movw %ax, %fs
     movw %ax, %gs
 
-    # Compute physical base address from CS: base = CS << 4.
-    movw %cs, %ax
-    movzwl %ax, %eax
-    shll $4, %eax           # eax = physical base of trampoline page
-
-    # Load GDT pseudo-descriptor (base patched by smp_init).
-    # Use PIC via computed base to avoid absolute 16-bit relocation.
-    movl %eax, %edx
+    # Load GDT descriptor.
+    # The GDTR is at trampoline_base + tr_gdtr_offset.
+    # lgdtl uses DS segment, so we must zero DS to get flat physical
+    # addressing (DS has base = CS base = trampoline_base set above).
+    movl %ebp, %edx
     addl $(tr_gdtr - trampoline_start), %edx
+    xorw %ax, %ax
+    movw %ax, %ds                # DS = 0 — absolute physical addressing
     lgdtl (%edx)
 
-    # Enter protected mode: set CR0.PE (bit 0).
+    # Restore DS for stack operations below.
+    movw %cs, %ax
+    movw %ax, %ds
+
+    # Set stack pointer to a safe area near top of 64K segment.
+    movw $0xFFF0, %sp
+
+    # Enter protected mode.
     movl %cr0, %ecx
     orl  $1, %ecx
     movl %ecx, %cr0
 
-    # Far jump to 32-bit code using computed runtime address.
-    # eax still holds the trampoline page base from above.
-    addl $(tmp_protected - trampoline_start), %eax   # eax = &tmp_protected
-    pushw $0x18          # 32-bit code selector (tr_gdt_code32, index 3)
-    pushl %eax           # 32-bit offset
+    # Far jump to 32-bit code via computed physical address.
+    movl %ebp, %eax
+    addl $(tmp_protected - trampoline_start), %eax
+    pushw $0x18                 # 32-bit code selector (index 3)
+    pushl %eax                  # 32-bit offset
     lretl
 
 # ── 32-bit protected mode ───────────────────────────────────────────
 .code32
 tmp_protected:
-    movw $0x20, %ax
+    movw $0x20, %ax             # 32-bit data selector (index 4)
     movw %ax, %ds
     movw %ax, %es
     movw %ax, %fs
     movw %ax, %gs
     movw %ax, %ss
 
-    # Temporary stack below 1 MiB (safe; smp_init reserves this area).
-    movl $0x8000, %esp
+    movl $0x8000, %esp          # temporary stack below 1 MiB
 
-    # Enable PAE: CR4.PAE = bit 5.
+    # Enable PAE.
     movl %cr4, %eax
     orl  $(1 << 5), %eax
     movl %eax, %cr4
 
-    # Get the runtime base address of the trampoline page (PIC).
+    # Get runtime base (PIC in 32-bit mode).
     call 1f
 1:  popl %ebx
-    subl $(1b - trampoline_start), %ebx   # ebx = &trampoline_start
+    subl $(1b - trampoline_start), %ebx
 
-    # Load shared page table root into CR3.
+    # Load shared kernel page tables.
     movl tr_cr3 - trampoline_start(%ebx), %eax
     movl %eax, %cr3
 
-    # Enable long mode: EFER.LME = bit 8 (MSR 0xC0000080).
+    # Enable long mode and NXE.
+    # NXE is required: Limine page tables mark data pages as NX.
     movl $0xC0000080, %ecx
     rdmsr
-    orl  $(1 << 8), %eax
+    orl  $((1 << 8) | (1 << 11)), %eax
     wrmsr
 
-    # Enable paging: CR0.PG = bit 31.
-    # With PAE + LME already set, the processor enters IA-32e
-    # compatibility mode; the far jump below transitions to 64-bit mode.
+    # Enable paging — enters IA-32e compatibility mode.
     movl %cr0, %eax
     orl  $(1 << 31), %eax
     movl %eax, %cr0
 
-    # Compute runtime address of tmp_long and far-jump to 64-bit mode.
-    leal tmp_long - trampoline_start(%ebx), %ecx   # ecx = &tmp_long
-    pushw $0x28          # 64-bit code selector (tr_gdt_code64, index 5)
+    # Far jump to 64-bit mode.
+    leal tmp_long - trampoline_start(%ebx), %ecx
+    pushw $0x28                 # 64-bit code selector (index 5)
     pushl %ecx
     lretl
 
 # ── 64-bit long mode ────────────────────────────────────────────────
 .code64
 tmp_long:
-    movw $0x30, %ax
+    movw $0x30, %ax             # 64-bit data selector (index 6)
     movw %ax, %ds
     movw %ax, %es
     movw %ax, %fs
@@ -151,14 +157,11 @@ tmp_long:
     movw %ax, %ss
 
     # Call smp_ap_entry(cpu_id | (lapic_id << 32)).
-    # tr_id is filled by smp_init before SIPI.
     movq tr_entry(%rip), %rax
     movq tr_id(%rip), %rdi
     callq *%rax
 
-    # smp_ap_entry should never return.
-.Lhalt:
-    hlt
-    jmp .Lhalt
+1:  hlt
+    jmp 1b
 
 trampoline_end:
