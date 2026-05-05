@@ -27,6 +27,13 @@ int acpi_find_madt(uint64_t hhdm, uint64_t rsdp_phys, const MADT** out_madt) {
     // RSDP checksum: first 20 bytes must sum to zero
     if (!checksum_ok(reinterpret_cast<const uint8_t*>(rsdp), 20)) return -2;
 
+    // ACPI 2.0+ extended checksum: full RSDP length must sum to zero
+    if (rsdp->revision >= 2 && rsdp->length > 20) {
+        if (!checksum_ok(reinterpret_cast<const uint8_t*>(rsdp), rsdp->length)) {
+            return -2;
+        }
+    }
+
     // Determine whether to use XSDT (ACPI 2.0+) or RSDT (ACPI 1.0)
     uint64_t dt_phys;
     bool is_xsdt;
@@ -81,8 +88,13 @@ int acpi_parse_cpus(const MADT* madt, CpuInfo* cpus, int max_cpus) {
     const uint8_t* end = reinterpret_cast<const uint8_t*>(madt) + madt->header.length;
 
     while (ptr < end) {
+        // Validate entry header bounds before dereferencing
+        if (ptr + 2 > end) break;
         auto* entry = reinterpret_cast<const MADTEntry*>(ptr);
+        if (entry->length < 2) break;
+        if (ptr + entry->length > end) break;
         if (entry->type == MADT_LAPIC && count < max_cpus) {
+            if (entry->length < 8) break;
             auto* lapic = reinterpret_cast<const MADTLapic*>(ptr);
             cpus[count].acpi_cpu_id = lapic->acpi_cpu_id;
             cpus[count].lapic_id = lapic->apic_id;
