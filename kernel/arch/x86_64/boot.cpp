@@ -326,30 +326,39 @@ extern "C" void kernel_entry(void) {
         return true;  // keep running forever
     });
 
-    klog("\n  Polling keyboard port 0x60 directly (no IRQ needed)...\n");
-    klog("  Press keys now! Data will appear below.\n\n");
+    klog("\n  Polling PS/2 (0x60) AND Serial (COM1 0x3F8) for input...\n");
+    klog("  Press keys now! Data will appear below.\n");
+    klog("  PS/2=[kbd]  Serial=[ser]\n\n");
 
-    // Enable interrupts (timer + keyboard IRQ), plus poll keyboard port
+    // Enable interrupts
     asm volatile("sti");
 
     static int poll_timer = 0;
     while (1) {
-        // Poll keyboard: if data is ready at port 0x60, read it
+        // 1. Poll PS/2 keyboard (port 0x60)
         if (x86::inb(0x64) & 1) {
             uint8_t code = x86::inb(0x60);
-            klog("  [poll] scancode: 0x");
+            klog("\n  [kbd] scancode: 0x");
             klog_hex(code);
-            if (code & 0x80) {
-                klog(" (release)\n");
-            } else {
-                klog(" (press)\n");
-            }
+            if (code & 0x80) klog(" (release)");
+            else klog(" (press)");
         }
 
-        // Print heartbeat every ~second to show we're alive
+        // 2. Poll serial port COM1 (0x3F8) for input
+        //    Line Status Register (0x3FD) bit 0 = Data Ready
+        if (x86::inb(0x3FD) & 1) {
+            uint8_t ch = x86::inb(0x3F8);
+            klog("\n  [ser] char='");
+            serial_putc(ch);     // echo back to terminal
+            klog("' (0x");
+            klog_hex(ch);
+            klog(")");
+        }
+
+        // Heartbeat
         poll_timer++;
-        if (poll_timer % 10000000 == 0) {
-            klog("  [poll] heartbeat: waiting for keys...\n");
+        if (poll_timer % 50000000 == 0) {
+            klog("\n  [hb] still polling PS/2 + COM1...\n");
         }
         x86::pause();
     }
