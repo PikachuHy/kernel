@@ -242,30 +242,66 @@ extern "C" void kernel_entry(void) {
     klog("  ================================================\n\n");
 
     // ── Initialize PS/2 keyboard controller ──
-    // The 8042 controller at ports 0x60/0x64 must be told to enable the
-    // keyboard port and start scanning, otherwise IRQ1 never fires.
     {
-        // Wait for input buffer empty, then enable first PS/2 port
-        while (x86::inb(0x64) & 2) x86::pause();
-        x86::outb(0x64, 0xAE);  // "Enable First PS/2 Port"
+        klog("  PS/2 init: ");
 
-        // Flush any stale output buffer data
+        // Step 1: Read controller config byte to check IRQ enable bit
+        while (x86::inb(0x64) & 2) x86::pause();
+        x86::outb(0x64, 0x20);  // "Read Command Byte"
+        while (!(x86::inb(0x64) & 1)) x86::pause();
+        uint8_t cfg = x86::inb(0x60);
+        klog("cfg=0x"); klog_hex(cfg);
+
+        // Step 2: Ensure keyboard IRQ (bit 0) is enabled
+        if (!(cfg & 1)) {
+            cfg |= 1;  // enable keyboard interrupt
+            while (x86::inb(0x64) & 2) x86::pause();
+            x86::outb(0x64, 0x60);  // "Write Command Byte"
+            while (x86::inb(0x64) & 2) x86::pause();
+            x86::outb(0x60, cfg);
+            klog(" fixed-IRQ");
+        }
+
+        // Step 3: Enable first PS/2 port
+        while (x86::inb(0x64) & 2) x86::pause();
+        x86::outb(0x64, 0xAE);
+
+        // Step 4: Flush output buffer
         while (x86::inb(0x64) & 1) { (void)x86::inb(0x60); }
 
-        // Tell keyboard to start scanning
+        // Step 5: Tell keyboard to start scanning
         while (x86::inb(0x64) & 2) x86::pause();
-        x86::outb(0x60, 0xF4);  // "Enable Scanning"
+        x86::outb(0x60, 0xF4);
 
-        klog("  PS/2 keyboard: enabled\n\n");
+        // Step 6: Wait for ACK (0xFA)
+        while (!(x86::inb(0x64) & 1)) x86::pause();
+        uint8_t ack = x86::inb(0x60);
+        klog(" ack=0x"); klog_hex(ack);
+
+        // Step 7: Verify I/O APIC redirection entry for IRQ1
+        // Read back entry 1 low DWORD from I/O APIC (IOREGSEL=0x12, IOWIN=low32)
+        x86::mmio_write32(hhdm, IOAPIC_BASE_PHYS + IOAPIC_IOREGSEL, IOAPIC_REDTBL + 2);
+        uint32_t redir_lo = x86::mmio_read32(hhdm, IOAPIC_BASE_PHYS + IOAPIC_IOWIN);
+        klog(" redir_lo=0x"); klog_hex(redir_lo);
+
+        klog("\n  Keyboard ready. LAPIC_ID=");
+        klog_hex((lapic_read(LAPIC_ID) >> 24) & 0xFF);
+        klog(" IOAPIC_IRQ1_vector=0x");
+        klog_hex(redir_lo & 0xFF);
+        klog(" mask=");
+        klog_hex((redir_lo >> 16) & 1);
+        klog("\n\n");
     }
 
-    // Track demo state (non-volatile; memory barrier in loop ensures visibility)
+    // Track demo state
     static int  timer_ticks = 0;
     static char last_scancode = 0;
 
     // Register keyboard handler on IRQ1 (vector 33)
     irq_register(1, [](uint8_t vector) -> bool {
         (void)vector;
+        // Wait for data in output buffer, then read scancode
+        while (!(x86::inb(0x64) & 1)) x86::pause();
         uint8_t code = x86::inb(0x60);
         last_scancode = static_cast<char>(code);
         klog("  [kbd] scancode: 0x");
