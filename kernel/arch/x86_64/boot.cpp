@@ -284,17 +284,15 @@ extern "C" void kernel_entry(void) {
 
     // Phase 1: cooperative yield test
     Thread* t_a = thread_create([](){
-        int round = 0;
-        while (1) {
-            klog("[A] "); klog_hex(round++); klog("\n");
+        for (int round = 0; round < 5; round++) {
+            klog("[A] "); klog_hex(round); klog("\n");
             thread_yield();
         }
     }, "demo-A", 1);
 
     Thread* t_b = thread_create([](){
-        int round = 0;
-        while (1) {
-            klog("[B] "); klog_hex(round++); klog("\n");
+        for (int round = 0; round < 5; round++) {
+            klog("[B] "); klog_hex(round); klog("\n");
             thread_yield();
         }
     }, "demo-B", 1);
