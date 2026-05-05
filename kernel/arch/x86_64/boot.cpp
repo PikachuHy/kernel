@@ -186,12 +186,15 @@ extern "C" void kernel_entry(void) {
     }
 
     // 3. Higher-half paging takeover
-    // (Limine page tables are used directly — paging_init with CR3 reload
-    //  has issues that need further debugging)
-    klog("Using Limine page tables...\n");
+    klog("Initializing paging...\n");
+    paging_init(hhdm, kernel_phys, kernel_virt, kernel_size);
 
-    // 4. Slab allocator using bitmap directly for slab pages
-    // (buddy will be wired later when properly debugged)
+    // 4. Buddy allocator takes over physical page management from bitmap
+    klog("Initializing buddy allocator...\n");
+    buddy_init(hhdm, 0);
+    klog("  buddy ready\n\n");
+
+    // 5. Slab allocator using buddy for slab pages
     klog("Initializing slab allocator...\n");
     slab_init(hhdm);
     klog("  kmalloc ready (16B-2048B)\n\n");
