@@ -16,6 +16,7 @@
 #include "kernel/arch/x86_64/timer.hpp"
 #include "kernel/arch/x86_64/syscall.hpp"
 #include "kernel/arch/x86_64/io.hpp"
+#include "kernel/arch/x86_64/acpi.hpp"
 
 static uint8_t boot_stack[65536];
 
@@ -45,6 +46,11 @@ static volatile struct limine_kernel_file_request kernel_file_request = {
     .revision = 0, .response = nullptr,
 };
 
+static volatile struct limine_rsdp_request rsdp_request = {
+    .id = {LIMINE_COMMON_MAGIC, LIMINE_RSDP_REQUEST_ID},
+    .revision = 0, .response = nullptr,
+};
+
 static volatile struct limine_smp_request smp_request = {
     .id = {LIMINE_COMMON_MAGIC, LIMINE_SMP_REQUEST_ID},
     .revision = 0, .response = nullptr, .flags = 0,
@@ -57,6 +63,7 @@ static volatile void* limine_requests[] = {
     &memmap_request,
     &hhdm_request,
     &kernel_file_request,
+    &rsdp_request,
     &smp_request,
     nullptr,
 };
@@ -295,12 +302,31 @@ extern "C" void kernel_entry(void) {
 
     asm volatile("sti");
 
-    // SMP check (temporary -- Task 2 verification; Task 4 will do real init)
-    if (smp_request.response) {
-        klog("\nSMP: response OK, "); klog_hex(smp_request.response->cpu_count);
-        klog(" CPUs advertised\n");
-    } else {
-        klog("\nSMP: no response (wrong magic?)\n");
+    // ── ACPI CPU discovery test (temporary debug) ──
+    {
+        uint64_t rsdp_phys = 0;
+        if (rsdp_request.response && rsdp_request.response->address) {
+            // Limine provides the RSDP as a HHDM-mapped virtual address.
+            uint64_t rsdp_virt = reinterpret_cast<uint64_t>(rsdp_request.response->address);
+            rsdp_phys = rsdp_virt - hhdm;
+        }
+        if (rsdp_phys) {
+            const MADT* madt = nullptr;
+            if (acpi_find_madt(hhdm, rsdp_phys, &madt) == 0) {
+                CpuInfo cpus[ACPI_MAX_CPUS];
+                int n = acpi_parse_cpus(madt, cpus, ACPI_MAX_CPUS);
+                klog("ACPI: MADT found, "); klog_hex(n); klog(" CPU(s):\n");
+                for (int i = 0; i < n; i++) {
+                    klog("  CPU: acpi_id="); klog_hex(cpus[i].acpi_cpu_id);
+                    klog(" lapic_id="); klog_hex(cpus[i].lapic_id);
+                    klog(cpus[i].enabled ? " enabled\n" : " DISABLED\n");
+                }
+            } else {
+                klog("ACPI: MADT not found\n");
+            }
+        } else {
+            klog("ACPI: no RSDP from Limine\n");
+        }
     }
 
     // Main loop: poll serial port COM1 for keystrokes

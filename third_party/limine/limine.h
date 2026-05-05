@@ -27,6 +27,9 @@
 #define LIMINE_KERNEL_FILE_REQUEST_ID \
     0xad97e90e83f1ed67, 0x31eb5d1c5ff23b69
 
+#define LIMINE_RSDP_REQUEST_ID \
+    0xc5e77b6b397e7b43, 0x27637845accdcf3c
+
 struct limine_uuid {
     uint32_t a;
     uint16_t b;

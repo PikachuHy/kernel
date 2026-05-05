@@ -5,6 +5,7 @@ exports_files(["irq.cpp", "irq.hpp"])
 cc_library(
     name = "arch",
     srcs = [
+        "acpi.cpp",
         "apic.cpp",
         "boot.cpp",
         "gdt.cpp",
@@ -18,6 +19,7 @@ cc_library(
         "timer.cpp",
     ],
     hdrs = [
+        "acpi.hpp",
         "apic.hpp",
         "gdt.hpp",
         "idt.hpp",
