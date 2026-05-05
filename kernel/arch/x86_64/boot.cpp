@@ -294,8 +294,7 @@ extern "C" void kernel_entry(void) {
     }
 
     // Track demo state
-    static int  timer_ticks = 0;
-    static char last_scancode = 0;
+    static int timer_ticks = 0;
 
     // Register keyboard handler on IRQ1 (vector 33)
     irq_register(1, [](uint8_t vector) -> bool {
@@ -303,60 +302,38 @@ extern "C" void kernel_entry(void) {
         // Wait for data in output buffer, then read scancode
         while (!(x86::inb(0x64) & 1)) x86::pause();
         uint8_t code = x86::inb(0x60);
-        last_scancode = static_cast<char>(code);
-        klog("  [kbd] scancode: 0x");
+        klog("\n  [kbd] scancode: 0x");
         klog_hex(code);
         if (code & 0x80) {
-            klog(" (release)\n");
+            klog(" (release)");
         } else {
-            klog(" (press)\n");
+            klog(" (press)");
         }
         return true;
     });
 
-    // Start a periodic timer. The LAPIC timer fires at ~1ms intervals
-    // (calibration produces 1M ticks/ms; interval=1000us gives 1000*1M/1000=1M ticks ≈ 1ms).
-    // We stop after 2000 ticks (~2 seconds) to show sustained operation.
+    // Start a periodic timer to print ticks.
     timer_periodic(1000, [](uint64_t elapsed_ms) -> bool {
         timer_ticks++;
-        // Print every 200 ticks so we don't flood output
-        if (timer_ticks % 200 == 0) {
-            klog("  [timer] tick #");
+        // Print every 500 ticks to show the timer is alive
+        if (timer_ticks % 500 == 0) {
+            klog("\n  [timer] tick #");
             klog_hex(timer_ticks);
-            klog(" @ ");
+            klog(" @ ~");
             klog_hex(elapsed_ms);
-            klog(" ms\n");
+            klog(" ms");
         }
-        return timer_ticks < 2000;
+        return true;  // keep running forever
     });
 
-    klog("  Interrupts enabled. Watching for keys + timer...\n\n");
+    klog("\n  Interrupts enabled. Press keys now — scancodes appear above.\n");
+    klog("  Timer ticks print every ~500ms.\n");
+    klog("  Press Ctrl+A then X to exit QEMU.\n\n");
 
-    // Enable interrupts — both timer and keyboard IRQ go live now
+    // Enable interrupts — keyboard and timer go live, run indefinitely
     asm volatile("sti");
 
-    // Wait for demo to finish (2000 timer ticks). Memory clobber ensures
-    // the compiler re-reads timer_ticks from memory each iteration.
-    while (timer_ticks < 2000) {
-        asm volatile("pause" ::: "memory");
+    while (1) {
+        asm volatile("hlt");
     }
-
-    // All done — stop interrupts and report
-    asm volatile("cli");
-
-    klog("\n  ================================================\n");
-    klog("  Demo complete! Summary:\n");
-    klog("  ------------------------------------------------\n");
-    klog("  Timer ticks fired: ");
-    klog_hex(timer_ticks);
-    klog("\n");
-    klog("  Last scancode seen: 0x");
-    klog_hex(static_cast<uint8_t>(last_scancode));
-    klog("\n");
-    klog("  ================================================\n\n");
-
-    klog("=== Kernel booted successfully ===\n");
-    klog("  (Ctrl+A then X to exit QEMU)\n");
-
-    while (1) { asm volatile("hlt"); }
 }
