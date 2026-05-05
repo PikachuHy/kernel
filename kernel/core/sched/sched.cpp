@@ -182,7 +182,6 @@ void scheduler_tick() {
     cur->time_slice_ms--;
 
     if (cur->time_slice_ms <= 0) {
-        // Reset time slice before rescheduling
         cur->time_slice_ms = SCHED_DEFAULT_TIMESLICE_MS;
         scheduler_schedule();
     }
@@ -207,8 +206,17 @@ void scheduler_schedule() {
         next = s_idle_threads[0];
     }
 
+    // Convert rsp from physical to virtual if needed (idle threads
+    // are created with physical rsp, normal threads get converted
+    // in thread_start, but double-check here for safety).
+    if (next->rsp < g_hhdm) {
+        next->rsp += g_hhdm;
+    }
+
     // If we would switch to the same thread, skip the context switch
-    if (next == prev) return;
+    if (next == prev) {
+        return;
+    }
 
     // Mark next as Running
     next->state = ThreadState::Running;

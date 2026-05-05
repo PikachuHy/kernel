@@ -77,6 +77,12 @@ static volatile bool bsp_done __attribute__((unused)) = false;
 // Linker symbol: end of BSS
 extern uint8_t _end;
 
+// Timer preemption callback — drives scheduler_tick() from LAPIC timer.
+static bool timer_preempt_callback(uint64_t) {
+    scheduler_tick();
+    return true;
+}
+
 extern "C" void kernel_entry(void) {
     asm volatile("movq %0, %%rsp" : : "r"(&boot_stack[sizeof(boot_stack)]));
 
@@ -270,29 +276,28 @@ extern "C" void kernel_entry(void) {
     klog("Initializing scheduler...\n");
     scheduler_init(hhdm);
 
-    // Create two demo threads at priority 1
+    // Phase 1: cooperative yield test
     Thread* t_a = thread_create([](){
+        int round = 0;
         while (1) {
-            klog("[A] tick\n");
-            for (int i = 0; i < 50000000; i++) asm volatile("pause" : : "r"(i));
+            klog("[A] "); klog_hex(round++); klog("\n");
+            thread_yield();
         }
     }, "demo-A", 1);
 
     Thread* t_b = thread_create([](){
+        int round = 0;
         while (1) {
-            klog("[B] tick\n");
-            for (int i = 0; i < 50000000; i++) asm volatile("pause" : : "r"(i));
+            klog("[B] "); klog_hex(round++); klog("\n");
+            thread_yield();
         }
     }, "demo-B", 1);
 
     if (t_a) thread_start(t_a);
     if (t_b) thread_start(t_b);
 
-    // Hook timer to scheduler for preemption (every 1ms)
-    timer_periodic(1000, [](uint64_t) -> bool {
-        scheduler_tick();
-        return true;
-    });
+    // Hook timer to scheduler for preemption (every 10ms)
+    timer_periodic(10000, timer_preempt_callback);
 
     klog("Scheduler starting...\n\n");
     asm volatile("sti");
