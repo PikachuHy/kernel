@@ -1,0 +1,12 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "sched_test",
+    size = "small",
+    srcs = ["sched_test.cpp"],
+    deps = [
+        "//kernel/core/sched:sched_hdrs",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)

@@ -1,0 +1,27 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+exports_files(
+    ["sched.cpp", "sched.hpp", "switch.S"],
+    visibility = ["//test:__subpackages__"],
+)
+
+cc_library(
+    name = "sched",
+    srcs = [
+        "sched.cpp",
+        "switch.S",
+    ],
+    hdrs = ["sched.hpp"],
+    deps = [
+        "//kernel/arch/x86_64:arch",
+        "//kernel/core/mm:mm",
+        "//kernel/lib:klib",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "sched_hdrs",
+    hdrs = ["sched.hpp"],
+    visibility = ["//visibility:public"],
+)
