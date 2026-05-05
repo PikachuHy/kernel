@@ -45,6 +45,11 @@ static volatile struct limine_kernel_file_request kernel_file_request = {
     .revision = 0, .response = nullptr,
 };
 
+static volatile struct limine_smp_request smp_request = {
+    .id = {LIMINE_COMMON_MAGIC, LIMINE_SMP_REQUEST_ID},
+    .revision = 0, .response = nullptr, .flags = 0,
+};
+
 __attribute__((section(".limine_reqs"), used))
 static volatile void* limine_requests[] = {
     &framebuffer_request,
@@ -52,8 +57,13 @@ static volatile void* limine_requests[] = {
     &memmap_request,
     &hhdm_request,
     &kernel_file_request,
+    &smp_request,
     nullptr,
 };
+
+// BSP handshake: set true after BSP finishes init. APs spin until this is set,
+// then divert to the AP entry path instead of re-running BSP init.
+static volatile bool bsp_done __attribute__((unused)) = false;
 
 // Linker symbol: end of BSS
 extern uint8_t _end;
@@ -284,6 +294,14 @@ extern "C" void kernel_entry(void) {
     klog("\n  --- Demo running (Ctrl+A X to exit) ---\n\n");
 
     asm volatile("sti");
+
+    // SMP check (temporary -- Task 2 verification; Task 4 will do real init)
+    if (smp_request.response) {
+        klog("\nSMP: response OK, "); klog_hex(smp_request.response->cpu_count);
+        klog(" CPUs advertised\n");
+    } else {
+        klog("\nSMP: no response (wrong magic?)\n");
+    }
 
     // Main loop: poll serial port COM1 for keystrokes
     while (1) {

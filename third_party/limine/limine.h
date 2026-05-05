@@ -15,6 +15,9 @@
 #define LIMINE_MEMMAP_REQUEST_ID \
     0x67cf3d9d378a806f, 0xe304acdfc50c3c62
 
+#define LIMINE_SMP_REQUEST_ID \
+    0x6b50ad9bf36d13ad, 0xdc4c7e88fc759e17
+
 #define LIMINE_HHDM_REQUEST_ID \
     0x48dcf1cb8ad2b852, 0x63984e959a98244b
 

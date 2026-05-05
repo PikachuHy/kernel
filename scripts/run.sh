@@ -39,5 +39,6 @@ echo ""
 qemu-system-x86_64 \
     -drive file="$DISK_IMG",format=raw,if=ide \
     -m 512M \
+    -smp 2 \
     -nographic \
     -no-reboot
