@@ -2,14 +2,14 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
     name = "object",
-    srcs = ["object.cpp"],
-    hdrs = ["object.hpp", "rights.hpp"],
-    deps = ["//kernel/core/mm:mm"],
+    srcs = ["object.cpp", "handle_table.cpp"],
+    hdrs = ["object.hpp", "rights.hpp", "handle_table.hpp"],
+    deps = ["//kernel/core/mm:mm", "//kernel/lib:klib"],
     visibility = ["//visibility:public"],
 )
 
 cc_library(
     name = "object_hdrs",
-    hdrs = ["object.hpp", "rights.hpp"],
+    hdrs = ["object.hpp", "rights.hpp", "handle_table.hpp"],
     visibility = ["//visibility:public"],
 )
