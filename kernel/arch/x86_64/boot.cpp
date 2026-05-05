@@ -15,6 +15,7 @@
 #include "kernel/arch/x86_64/irq.hpp"
 #include "kernel/arch/x86_64/timer.hpp"
 #include "kernel/arch/x86_64/syscall.hpp"
+#include "kernel/arch/x86_64/io.hpp"
 
 static uint8_t boot_stack[65536];
 
@@ -223,26 +224,82 @@ extern "C" void kernel_entry(void) {
     klog("Initializing syscall...\n");
     syscall_init();
 
-    // ── Timer demo: 3 periodic ticks ──
-    {
-        klog("\n  [demo] Periodic timer: 1 tick/sec, 3 ticks...\n");
-        static volatile int ticks = 0;
-        timer_periodic(1000000, [](uint64_t elapsed) -> bool {
-            ticks = ticks + 1;
-            klog("  [demo] Tick #");
-            klog_hex(ticks);
+    // ── Demo: Phase 3 capabilities showcase ──
+    // This demonstrates three things working together:
+    //   1. LAPIC timer   (periodic callback, fires every ~100ms)
+    //   2. Keyboard IRQ  (IRQ1 routed through I/O APIC → IDT[33] → handler)
+    //   3. IOAPIC routing (ISA IRQ1 → vector 33)
+    //
+    //  After boot, you'll see a timer counting up. Press keyboard keys
+    //  and their scancodes appear as hex.
+    //
+    klog("\n");
+    klog("  ================================================\n");
+    klog("  Phase 3 Demo: Timer + Keyboard Interrupt\n");
+    klog("  ------------------------------------------------\n");
+    klog("  Timer ticks every ~1ms (counter below).\n");
+    klog("  Press keys to see scancodes via IRQ1 dispatch.\n");
+    klog("  ================================================\n\n");
+
+    // Track demo state (non-volatile; memory barrier in loop ensures visibility)
+    static int  timer_ticks = 0;
+    static char last_scancode = 0;
+
+    // Register keyboard handler on IRQ1 (vector 33)
+    irq_register(1, [](uint8_t vector) -> bool {
+        (void)vector;
+        uint8_t code = x86::inb(0x60);
+        last_scancode = static_cast<char>(code);
+        klog("  [kbd] scancode: 0x");
+        klog_hex(code);
+        if (code & 0x80) {
+            klog(" (release)\n");
+        } else {
+            klog(" (press)\n");
+        }
+        return true;
+    });
+
+    // Start a periodic timer. The LAPIC timer fires at ~1ms intervals
+    // (calibration produces 1M ticks/ms; interval=1000us gives 1000*1M/1000=1M ticks ≈ 1ms).
+    // We stop after 2000 ticks (~2 seconds) to show sustained operation.
+    timer_periodic(1000, [](uint64_t elapsed_ms) -> bool {
+        timer_ticks++;
+        // Print every 200 ticks so we don't flood output
+        if (timer_ticks % 200 == 0) {
+            klog("  [timer] tick #");
+            klog_hex(timer_ticks);
             klog(" @ ");
-            klog_hex(elapsed);
+            klog_hex(elapsed_ms);
             klog(" ms\n");
-            return ticks < 3;
-        });
+        }
+        return timer_ticks < 2000;
+    });
 
-        asm volatile("sti");
-        while (ticks < 3) asm volatile("pause");
-        asm volatile("cli");
+    klog("  Interrupts enabled. Watching for keys + timer...\n\n");
 
-        klog("  [demo] Timer demo done (3 ticks fired)\n\n");
+    // Enable interrupts — both timer and keyboard IRQ go live now
+    asm volatile("sti");
+
+    // Wait for demo to finish (2000 timer ticks). Memory clobber ensures
+    // the compiler re-reads timer_ticks from memory each iteration.
+    while (timer_ticks < 2000) {
+        asm volatile("pause" ::: "memory");
     }
+
+    // All done — stop interrupts and report
+    asm volatile("cli");
+
+    klog("\n  ================================================\n");
+    klog("  Demo complete! Summary:\n");
+    klog("  ------------------------------------------------\n");
+    klog("  Timer ticks fired: ");
+    klog_hex(timer_ticks);
+    klog("\n");
+    klog("  Last scancode seen: 0x");
+    klog_hex(static_cast<uint8_t>(last_scancode));
+    klog("\n");
+    klog("  ================================================\n\n");
 
     klog("=== Kernel booted successfully ===\n");
     klog("  (Ctrl+A then X to exit QEMU)\n");
