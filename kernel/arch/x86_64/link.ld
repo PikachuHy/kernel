@@ -2,6 +2,9 @@ OUTPUT_FORMAT(elf64-x86-64)
 OUTPUT_ARCH(i386:x86-64)
 ENTRY(kernel_entry)
 
+/* Force inclusion of AP trampoline (unreferenced from C++ code). */
+EXTERN(trampoline_start)
+
 PHDRS
 {
     rx  PT_LOAD;
@@ -25,6 +28,10 @@ SECTIONS
 
     .rodata : {
         *(.rodata .rodata.*)
+    } :rx
+
+    .trampoline : {
+        *(.trampoline)
     } :rx
 
     . = ALIGN(0x1000);

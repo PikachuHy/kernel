@@ -17,6 +17,7 @@ cc_library(
         "syscall.cpp",
         "syscall_entry.S",
         "timer.cpp",
+        "trampoline.S",
     ],
     hdrs = [
         "acpi.hpp",

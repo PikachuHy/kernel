@@ -39,3 +39,7 @@ extern uint32_t g_cpu_count;
 uint32_t smp_init();
 
 uint32_t smp_cpu_count();
+
+// AP entry point (called from trampoline after long-mode transition).
+// id = cpu_id | (lapic_id << 32).  Defined in smp.cpp (Task 4+).
+extern "C" void smp_ap_entry(uint64_t id);

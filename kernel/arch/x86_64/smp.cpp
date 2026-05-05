@@ -14,6 +14,11 @@ void spinlock_release(Spinlock* lock) {
     __atomic_clear(&lock->locked, __ATOMIC_RELEASE);
 }
 
+// Stub — will be properly implemented in Task 4.
+extern "C" void smp_ap_entry(uint64_t /*id*/) {
+    while (true) { asm volatile("hlt"); }
+}
+
 // Placeholder — will be implemented in Task 4
 uint32_t smp_init() {
     klog("SMP: smp_init() placeholder\n");
