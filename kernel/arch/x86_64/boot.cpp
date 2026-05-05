@@ -326,14 +326,31 @@ extern "C" void kernel_entry(void) {
         return true;  // keep running forever
     });
 
-    klog("\n  Interrupts enabled. Press keys now — scancodes appear above.\n");
-    klog("  Timer ticks print every ~500ms.\n");
-    klog("  Press Ctrl+A then X to exit QEMU.\n\n");
+    klog("\n  Polling keyboard port 0x60 directly (no IRQ needed)...\n");
+    klog("  Press keys now! Data will appear below.\n\n");
 
-    // Enable interrupts — keyboard and timer go live, run indefinitely
+    // Enable interrupts (timer + keyboard IRQ), plus poll keyboard port
     asm volatile("sti");
 
+    static int poll_timer = 0;
     while (1) {
-        asm volatile("hlt");
+        // Poll keyboard: if data is ready at port 0x60, read it
+        if (x86::inb(0x64) & 1) {
+            uint8_t code = x86::inb(0x60);
+            klog("  [poll] scancode: 0x");
+            klog_hex(code);
+            if (code & 0x80) {
+                klog(" (release)\n");
+            } else {
+                klog(" (press)\n");
+            }
+        }
+
+        // Print heartbeat every ~second to show we're alive
+        poll_timer++;
+        if (poll_timer % 10000000 == 0) {
+            klog("  [poll] heartbeat: waiting for keys...\n");
+        }
+        x86::pause();
     }
 }
