@@ -17,6 +17,7 @@
 #include "kernel/arch/x86_64/syscall.hpp"
 #include "kernel/arch/x86_64/io.hpp"
 #include "kernel/arch/x86_64/acpi.hpp"
+#include "kernel/arch/x86_64/smp.hpp"
 
 static uint8_t boot_stack[65536];
 
@@ -302,32 +303,25 @@ extern "C" void kernel_entry(void) {
 
     asm volatile("sti");
 
-    // ── ACPI CPU discovery test (temporary debug) ──
-    {
-        uint64_t rsdp_phys = 0;
-        if (rsdp_request.response && rsdp_request.response->address) {
-            // Limine provides the RSDP as a HHDM-mapped virtual address.
-            uint64_t rsdp_virt = reinterpret_cast<uint64_t>(rsdp_request.response->address);
-            rsdp_phys = rsdp_virt - hhdm;
-        }
-        if (rsdp_phys) {
-            const MADT* madt = nullptr;
-            if (acpi_find_madt(hhdm, rsdp_phys, &madt) == 0) {
-                CpuInfo cpus[ACPI_MAX_CPUS];
-                int n = acpi_parse_cpus(madt, cpus, ACPI_MAX_CPUS);
-                klog("ACPI: MADT found, "); klog_hex(n); klog(" CPU(s):\n");
-                for (int i = 0; i < n; i++) {
-                    klog("  CPU: acpi_id="); klog_hex(cpus[i].acpi_cpu_id);
-                    klog(" lapic_id="); klog_hex(cpus[i].lapic_id);
-                    klog(cpus[i].enabled ? " enabled\n" : " DISABLED\n");
-                }
-            } else {
-                klog("ACPI: MADT not found\n");
-            }
-        } else {
-            klog("ACPI: no RSDP from Limine\n");
-        }
+    // ── Phase 4: SMP bringup ──
+    klog("=== Phase 4: SMP Bringup ===\n\n");
+
+    uint64_t rsdp_phys = 0;
+    if (rsdp_request.response && rsdp_request.response->address) {
+        uint64_t rsdp_virt = reinterpret_cast<uint64_t>(rsdp_request.response->address);
+        rsdp_phys = rsdp_virt - hhdm;
     }
+    smp_init(hhdm, rsdp_phys);
+
+    // ── SMP summary ──
+    klog("\n  --- CPU Summary ---\n");
+    for (uint32_t i = 0; i < smp_cpu_count(); i++) {
+        klog("  CPU "); klog_hex(i);
+        klog(": LAPIC="); klog_hex(g_per_cpu[i].lapic_id);
+        klog(" online=");
+        klog(g_per_cpu[i].online ? "yes\n" : "NO\n");
+    }
+    klog("  Total: "); klog_hex(smp_cpu_count()); klog(" CPU(s)\n\n");
 
     // Main loop: poll serial port COM1 for keystrokes
     while (1) {
