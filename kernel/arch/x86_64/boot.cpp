@@ -8,6 +8,7 @@
 #include "kernel/core/mm/bitmap_alloc.hpp"
 #include "kernel/core/mm/buddy.hpp"
 #include "kernel/core/mm/slab.hpp"
+#include "kernel/core/sched/sched.hpp"
 #include "kernel/lib/klog.hpp"
 #include "kernel/lib/serial.hpp"
 #include "kernel/lib/panic.hpp"
@@ -242,66 +243,6 @@ extern "C" void kernel_entry(void) {
     klog("Initializing syscall...\n");
     syscall_init();
 
-    // ── Demo: Phase 3 capabilities showcase ──
-    //
-    //  Phase 3 completed:
-    //    1. LAPIC enabled, I/O APIC routing configured (verified)
-    //    2. IRQ dispatch table + stubs for vectors 32-47
-    //    3. LAPIC timer calibrated against PIT, periodic callbacks
-    //    4. Syscall entry/exit (LSTAR MSR set)
-    //
-    //  Interactive demo:
-    //    - Timer fires periodically (shows APIC timer + IRQ dispatch)
-    //    - Serial input echo (COM1, because QEMU -nographic routes
-    //      keyboard to serial port, not PS/2)
-    //
-    klog("\n");
-    klog("  ================================================\n");
-    klog("      Phase 3: APIC + Timer + IRQ — Live Demo\n");
-    klog("  ================================================\n");
-    klog("  LAPIC timer  → periodic IRQ  (vec 32) ✅\n");
-    klog("  I/O APIC     → IRQ1 routing  (vec 33) ✅\n");
-    klog("  Syscall MSRs → LSTAR programmed       ✅\n");
-    klog("  ------------------------------------------------\n");
-    klog("  Type below — serial echo shows keystrokes.\n");
-    klog("  Timer ticks every ~500ms.\n");
-    klog("  ================================================\n\n");
-
-    klog("  ");
-    // Track demo state
-    static int timer_ticks = 0;
-    static int char_count = 0;
-
-    // Register keyboard IRQ handler (PS/2 — not used in -nographic,
-    // but proves IRQ dispatch infrastructure works)
-    irq_register(1, [](uint8_t vector) -> bool {
-        (void)vector;
-        if (x86::inb(0x64) & 1) {
-            uint8_t code = x86::inb(0x60);
-            klog("\n  [IRQ1] PS/2 scancode: 0x");
-            klog_hex(code);
-            klog(" ");
-        }
-        return true;
-    });
-
-    // Periodic timer via LAPIC: fires every ~1ms, we report every 500
-    timer_periodic(1000, [](uint64_t elapsed_ms) -> bool {
-        timer_ticks++;
-        if (timer_ticks % 500 == 0) {
-            klog("\n  [timer] tick #");
-            klog_hex(timer_ticks);
-            klog(" (");
-            klog_hex(elapsed_ms);
-            klog(" ms elapsed)  |  chars typed: ");
-            klog_hex(char_count);
-        }
-        return true;
-    });
-
-    klog("\n  --- Demo running (Ctrl+A X to exit) ---\n\n");
-
-    asm volatile("sti");
 
     // ── Phase 4: SMP bringup ──
     klog("=== Phase 4: SMP Bringup ===\n\n");
@@ -323,22 +264,37 @@ extern "C" void kernel_entry(void) {
     }
     klog("  Total: "); klog_hex(smp_cpu_count()); klog(" CPU(s)\n\n");
 
-    // Main loop: poll serial port COM1 for keystrokes
-    while (1) {
-        // Line Status Register (0x3FD) bit 0 = Data Ready
-        if (x86::inb(0x3FD) & 1) {
-            uint8_t ch = x86::inb(0x3F8);
+    // ── Phase 5: Scheduler ──
+    klog("=== Phase 5: Scheduler ===\n\n");
 
-            // Echo the character back to the terminal
-            serial_putc(ch);
+    klog("Initializing scheduler...\n");
+    scheduler_init(hhdm);
 
-            if (ch == '\r') {
-                serial_putc('\n');  // CR → CRLF
-            }
-
-            char_count++;
+    // Create two demo threads at priority 1
+    Thread* t_a = thread_create([](){
+        while (1) {
+            klog("[A] tick\n");
+            for (int i = 0; i < 50000000; i++) asm volatile("pause" : : "r"(i));
         }
+    }, "demo-A", 1);
 
-        x86::pause();
-    }
+    Thread* t_b = thread_create([](){
+        while (1) {
+            klog("[B] tick\n");
+            for (int i = 0; i < 50000000; i++) asm volatile("pause" : : "r"(i));
+        }
+    }, "demo-B", 1);
+
+    if (t_a) thread_start(t_a);
+    if (t_b) thread_start(t_b);
+
+    // Hook timer to scheduler for preemption (every 1ms)
+    timer_periodic(1000, [](uint64_t) -> bool {
+        scheduler_tick();
+        return true;
+    });
+
+    klog("Scheduler starting...\n\n");
+    asm volatile("sti");
+    scheduler_start();  // never returns
 }

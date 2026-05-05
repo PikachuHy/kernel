@@ -27,7 +27,7 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 | 2: Memory Management | `docs/superpowers/plans/2026-05-02-phase-2-memory-management.md` | Done |
 | 3: Interrupt + Timer | `docs/superpowers/plans/2026-05-05-phase-3-apic-timer.md` | Done |
 | 4: SMP | `docs/superpowers/plans/2026-05-05-phase-4-smp.md` | Done |
-| 5-10: Remaining | TBD | — |
+| 5: Scheduler | `docs/superpowers/plans/2026-05-05-phase-5-scheduler.md` | Done |
 
 ## Build / Test / Lint
 
@@ -54,7 +54,9 @@ bash scripts/run.sh
 ```
 kernel/
 ├── arch/x86_64/        # boot, gdt, idt, apic, ioapic, irq, acpi, smp, trampoline, timer, syscall, paging, linker script
-├── core/mm/            # pmm, bitmap_alloc, buddy, slab, new_delete
+├── core/
+│   ├── mm/             # pmm, bitmap_alloc, buddy, slab, new_delete
+│   └── sched/          # scheduler — thread, run queue, context switch
 ├── lib/                # klog, panic, serial
 ├── BUILD.bazel
 test/
