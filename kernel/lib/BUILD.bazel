@@ -6,11 +6,13 @@ cc_library(
         "klog.cpp",
         "panic.cpp",
         "serial.cpp",
+        "spinlock.cpp",
     ],
     hdrs = [
         "klog.hpp",
         "panic.hpp",
         "serial.hpp",
+        "spinlock.hpp",
     ],
     deps = [
         "//third_party/limine:limine",
