@@ -50,10 +50,17 @@ struct RunQueue {
         bitmap = 0; count = 0;
     }
 
+    // Append to tail: FIFO per priority for round-robin fairness.
     void push(Thread* t) {
         int p = t->priority & 7;
-        t->next = heads[p];
-        heads[p] = t;
+        t->next = nullptr;
+        if (!heads[p]) {
+            heads[p] = t;
+        } else {
+            Thread* cur = heads[p];
+            while (cur->next) cur = cur->next;
+            cur->next = t;
+        }
         bitmap |= (1u << p);
         count++;
     }

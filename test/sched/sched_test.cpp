@@ -34,10 +34,10 @@ TEST(RunQueueTest, PushPopMultipleSamePriority) {
     Thread* a = rq.pop();
     Thread* b = rq.pop();
     Thread* c = rq.pop();
-    // LIFO order within same priority
-    EXPECT_EQ(a, &t3);
+    // FIFO order within same priority (push tail, pop head)
+    EXPECT_EQ(a, &t1);
     EXPECT_EQ(b, &t2);
-    EXPECT_EQ(c, &t1);
+    EXPECT_EQ(c, &t3);
     EXPECT_EQ(rq.pop(), nullptr);
     EXPECT_EQ(rq.count, 0u);
 }
@@ -70,30 +70,31 @@ TEST(RunQueueTest, InterleavedPriorities) {
 
     rq.push(&t7a);
     rq.push(&t1a);
-    rq.push(&t0b);
-    rq.push(&t0a);
+    rq.push(&t0b);  // prio 0, tail
+    rq.push(&t0a);  // prio 0, tail after t0b
 
-    // t0a pushed last, at head of prio 0
-    EXPECT_EQ(rq.pop(), &t0a);
+    // FIFO within priority: prio 0 → t0b then t0a, then prio 1, then prio 7
     EXPECT_EQ(rq.pop(), &t0b);
+    EXPECT_EQ(rq.pop(), &t0a);
     EXPECT_EQ(rq.pop(), &t1a);
     EXPECT_EQ(rq.pop(), &t7a);
     EXPECT_EQ(rq.pop(), nullptr);
 }
 
-TEST(RunQueueTest, RemoveFromHead) {
+TEST(RunQueueTest, RemoveFromTail) {
     RunQueue rq;
     rq.init();
     Thread t1{}, t2{}, t3{};
     t1.priority = 2; t2.priority = 2; t3.priority = 2;
     rq.push(&t1);
     rq.push(&t2);
-    rq.push(&t3);
+    rq.push(&t3);  // FIFO: t1 → t2 → t3
 
-    rq.remove(&t3);
+    rq.remove(&t3);  // remove tail
     EXPECT_EQ(rq.count, 2u);
-    EXPECT_EQ(rq.pop(), &t2);
+    // List: t1 → t2
     EXPECT_EQ(rq.pop(), &t1);
+    EXPECT_EQ(rq.pop(), &t2);
     EXPECT_EQ(rq.pop(), nullptr);
 }
 
@@ -104,13 +105,13 @@ TEST(RunQueueTest, RemoveFromMiddle) {
     t1.priority = 4; t2.priority = 4; t3.priority = 4;
     rq.push(&t1);
     rq.push(&t2);
-    rq.push(&t3);
+    rq.push(&t3);  // FIFO: t1 → t2 → t3
 
     rq.remove(&t2);
     EXPECT_EQ(rq.count, 2u);
-    // After remove(t2): t3->t1
-    EXPECT_EQ(rq.pop(), &t3);
+    // After remove(t2): t1 → t3
     EXPECT_EQ(rq.pop(), &t1);
+    EXPECT_EQ(rq.pop(), &t3);
     EXPECT_EQ(rq.pop(), nullptr);
 }
 
