@@ -340,15 +340,19 @@ extern "C" void kernel_entry(void) {
                     ->Write(ack, 15, nullptr, 0);
 
                 handle_free(client_chan);
+            } else {
+                thread_yield();
             }
         }
     }, "ipc-server", 1);
 
     Thread* ipc_client = thread_create([](){
+        klog("[ipc-client] started, looking for 'demo' port...\n");
         Port* port = nullptr;
         while (!(port = port_lookup_name("demo"))) {
             thread_yield();
         }
+        klog("[ipc-client] found port, connecting...\n");
 
         handle_t my_chan;
         Port::Connect(port, &my_chan);
@@ -358,20 +362,8 @@ extern "C" void kernel_entry(void) {
         static_cast<Channel*>(
             handle_lookup(my_chan, Rights{.mask = Rights::Write}))
             ->Write(msg, 18, nullptr, 0);
-
-        char reply[64] = {};
-        size_t len = 0;
-        int rc;
-        while ((rc = static_cast<Channel*>(
-            handle_lookup(my_chan, Rights{.mask = Rights::Read}))
-            ->Read(reply, sizeof(reply), &len, nullptr, 0, nullptr)) == -2) {
-            thread_yield();
-        }
-
-        klog("[ipc-client] Reply: '");
-        klog(reply);
-        klog("'\n");
-    }, "ipc-client", 2);
+        klog("[ipc-client] Sent message, done\n");
+    }, "ipc-client", 1);
 
     if (ipc_server) thread_start(ipc_server);
     if (ipc_client) thread_start(ipc_client);
