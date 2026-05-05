@@ -13,7 +13,7 @@ struct PerCpu {
 static_assert(sizeof(PerCpu) == 24, "PerCpu size mismatch");
 
 struct Spinlock {
-    uint32_t locked;  // 0=free, 1=held
+    uint8_t locked;  // 0=free, 1=held
 };
 
 void spinlock_acquire(Spinlock* lock);
@@ -23,6 +23,11 @@ struct ScopedSpinlock {
     Spinlock* lock;
     explicit ScopedSpinlock(Spinlock& l) : lock(&l) { spinlock_acquire(lock); }
     ~ScopedSpinlock() { spinlock_release(lock); }
+
+    ScopedSpinlock(const ScopedSpinlock&) = delete;
+    ScopedSpinlock& operator=(const ScopedSpinlock&) = delete;
+    ScopedSpinlock(ScopedSpinlock&&) = delete;
+    ScopedSpinlock& operator=(ScopedSpinlock&&) = delete;
 };
 
 // Global per-CPU array
