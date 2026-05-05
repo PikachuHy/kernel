@@ -25,10 +25,15 @@ int irq_register(uint8_t irq, irq_handler_t handler) {
 
 extern "C" void irq_dispatch(uint8_t vector) {
     if (vector < 32 || vector >= 48) return;
+    // EOI must be sent BEFORE calling handlers. If a handler triggers a
+    // context switch (e.g. timer → scheduler_tick → scheduler_schedule →
+    // switch_to), the handler never returns. EOI-after-handlers would be
+    // skipped, and the LAPIC would never deliver the next interrupt —
+    // effectively hanging preemption and any future timer ticks.
+    if (apic_is_ready()) lapic_eoi();
     uint8_t irq = vector - 32;
     if (irq >= MAX_IRQ) return;
     for (int i = 0; i < g_irqs[irq].count; i++) {
         if (g_irqs[irq].h[i]) g_irqs[irq].h[i](vector);
     }
-    if (apic_is_ready()) lapic_eoi();
 }
