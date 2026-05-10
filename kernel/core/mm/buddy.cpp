@@ -1,6 +1,7 @@
 #include "kernel/core/mm/buddy.hpp"
 #include "kernel/core/mm/pmm.hpp"
 #include "kernel/arch/x86_64/paging.hpp"
+#include "kernel/lib/klog.hpp"
 
 namespace {
 
@@ -64,6 +65,9 @@ constexpr size_t BUDDY_MAX_PAGES = 256 * 1024;  // 256K pages = 1GB physical
 Page g_page_array[BUDDY_MAX_PAGES];
 
 void buddy_init(uint64_t hhdm_offset, uint64_t page_array_phys) {
+    (void)hhdm_offset;
+    (void)page_array_phys;
+
     size_t usable_count;
     const MemRange* usable = pmm_usable_ranges(&usable_count);
     if (usable_count == 0) return;
@@ -73,8 +77,6 @@ void buddy_init(uint64_t hhdm_offset, uint64_t page_array_phys) {
     if (g_total_pages > BUDDY_MAX_PAGES) g_total_pages = BUDDY_MAX_PAGES;
 
     g_pages = g_page_array;
-    (void)hhdm_offset;
-    (void)page_array_phys;
 
     for (int i = 0; i <= BUDDY_MAX_ORDER; i++) {
         g_free_lists[i] = nullptr;

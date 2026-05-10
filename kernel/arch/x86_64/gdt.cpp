@@ -87,7 +87,10 @@ void tss_init() {
     uint64_t limit = sizeof(g_tss_data) - 1;
 
     set_entry(5, tss_addr & 0xFFFFFFFF, limit & 0xFFFFF, 0x89, 0);
-    set_entry(6, (tss_addr >> 32) & 0xFFFFFFFF, 0, 0, 0);
+    // Entry 6 for a 64-bit TSS is a raw 8-byte value:
+    //   bits 0:31  = BASE[63:32]
+    //   bits 32:63 = reserved (must be 0)
+    *reinterpret_cast<uint64_t*>(&gdt[6]) = (tss_addr >> 32) & 0xFFFFFFFF;
 
     asm volatile(
         "ltr %%ax\n"

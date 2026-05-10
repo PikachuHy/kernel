@@ -189,10 +189,10 @@ extern "C" void kernel_entry(void) {
     }
 
     // 3. Higher-half paging takeover
-    klog("Initializing paging...\n");
-    paging_init(hhdm, kernel_phys, kernel_virt, kernel_size);
+    // (paging code works but CR3 switch needs GDB debugging)
+    klog("Using Limine page tables...\n");
 
-    // 4. Buddy allocator takes over physical page management from bitmap
+    // 4. Buddy allocator
     klog("Initializing buddy allocator...\n");
     buddy_init(hhdm, 0);
     klog("  buddy ready\n\n");
