@@ -48,6 +48,25 @@ void paging_init(
     uint64_t kernel_virt_base,
     uint64_t kernel_size);
 
+// Save the kernel-half PML4 entries (indices 256-511) as a template
+// for new process address spaces. Call after paging_init succeeds.
+void paging_save_kernel_template();
+
+// Returns the saved kernel PML4 template (physical address).
+uint64_t paging_kernel_pml4_template();
+
+// Walk the page table for `va` in the given PML4, creating intermediate
+// tables as needed via bitmap_alloc_page. Installs `pa | flags` as the
+// leaf PTE. Returns true on success, false on allocation failure.
+bool page_table_map(uint64_t pml4_phys, uint64_t va, uint64_t pa, uint64_t flags);
+
+// Unmap a 4K page. Returns the physical address that was mapped, or 0.
+uint64_t page_table_unmap(uint64_t pml4_phys, uint64_t va);
+
+// Look up the physical address mapped at `va` in the given PML4.
+// Returns 0 if not mapped.
+uint64_t page_table_lookup(uint64_t pml4_phys, uint64_t va);
+
 inline constexpr uint64_t make_pte(uint64_t phys_addr, uint64_t flags) {
     return (phys_addr & ~(PAGE_SIZE - 1)) | flags;
 }

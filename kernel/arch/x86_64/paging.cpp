@@ -1,117 +1,76 @@
 #include "kernel/arch/x86_64/paging.hpp"
 #include "kernel/core/mm/bitmap_alloc.hpp"
-#include "kernel/core/mm/pmm.hpp"
 #include "kernel/lib/klog.hpp"
+#include "kernel/lib/panic.hpp"
 
 namespace {
 
 uint64_t g_hhdm = 0;
+uint64_t g_kernel_template_pml4 = 0;
 
-inline void* early_phys_to_virt(uint64_t phys_addr) {
-    return reinterpret_cast<void*>(g_hhdm + phys_addr);
+inline uint64_t* hhdm_ptr(uint64_t phys) {
+    return reinterpret_cast<uint64_t*>(g_hhdm + phys);
 }
 
-PageTable* alloc_table() {
+// Allocate a zeroed page table page. Returns physical address, or 0 on OOM.
+static uint64_t alloc_table_phys() {
     void* phys = bitmap_alloc_page();
-    if (!phys) return nullptr;
-    // Zero the page — it may contain garbage from previous use.
-    // Uninitialised page table entries with random Present bits set
-    // will crash the page-table walker after CR3 reload.
-    uint64_t* virt = static_cast<uint64_t*>(early_phys_to_virt(
-        reinterpret_cast<uint64_t>(phys)));
+    if (!phys) return 0;
+    uint64_t* virt = hhdm_ptr(reinterpret_cast<uint64_t>(phys));
     for (int i = 0; i < 512; i++) virt[i] = 0;
-    return static_cast<PageTable*>(phys);
+    return reinterpret_cast<uint64_t>(phys);
 }
 
-// Map using 2MB huge pages
-__attribute__((unused))
-static bool map_huge_range(PageTable* pml4_phys, uint64_t va, uint64_t pa, uint64_t size, uint64_t extra_flags) {
-    for (uint64_t offset = 0; offset < size; offset += LARGE_PAGE_SIZE) {
-        uint64_t cur_va = va + offset;
-        uint64_t cur_pa = pa + offset;
-        uint16_t i4 = pml4_index(cur_va);
-        uint16_t i3 = pdpt_index(cur_va);
-        uint16_t i2 = pd_index(cur_va);
-        PageTable* pml4 = static_cast<PageTable*>(early_phys_to_virt(
-            reinterpret_cast<uint64_t>(pml4_phys)));
-        if (!(pml4->entries[i4] & PageFlags::Present)) {
-            PageTable* pdpt = alloc_table();
-            if (!pdpt) return false;
-            pml4->entries[i4] = make_pte(reinterpret_cast<uint64_t>(pdpt),
-                                         PageFlags::Present | PageFlags::Writable);
-        }
-        PageTable* pdpt = static_cast<PageTable*>(early_phys_to_virt(
-            pte_phys_addr(pml4->entries[i4])));
-        if (!(pdpt->entries[i3] & PageFlags::Present)) {
-            PageTable* pd = alloc_table();
-            if (!pd) return false;
-            pdpt->entries[i3] = make_pte(reinterpret_cast<uint64_t>(pd),
-                                         PageFlags::Present | PageFlags::Writable);
-        }
-        PageTable* pd = static_cast<PageTable*>(early_phys_to_virt(
-            pte_phys_addr(pdpt->entries[i3])));
-        pd->entries[i2] = make_pte(cur_pa, PageFlags::Present | PageFlags::Writable |
-                                          PageFlags::Huge | extra_flags);
-    }
-    return true;
-}
+// Walk the page table for `va`, creating intermediate page tables as needed.
+// On return, *pte_out points to the leaf PTE slot (accessed via HHDM).
+// Returns true on success, false on OOM.
+static bool walk_create(uint64_t pml4_phys, uint64_t va, uint64_t** pte_out) {
+    uint16_t i4 = pml4_index(va);
+    uint16_t i3 = pdpt_index(va);
+    uint16_t i2 = pd_index(va);
+    uint16_t i1 = pt_index(va);
 
-// Map using 4KB pages
-__attribute__((unused))
-static bool map_4k_pages(PageTable* pml4_phys, uint64_t va, uint64_t pa, uint64_t size, uint64_t extra_flags) {
-    for (uint64_t offset = 0; offset < size; offset += PAGE_SIZE) {
-        uint64_t cur_va = va + offset;
-        uint64_t cur_pa = pa + offset;
-        uint16_t i4 = pml4_index(cur_va);
-        uint16_t i3 = pdpt_index(cur_va);
-        uint16_t i2 = pd_index(cur_va);
-        uint16_t i1 = pt_index(cur_va);
-        PageTable* pml4 = static_cast<PageTable*>(early_phys_to_virt(
-            reinterpret_cast<uint64_t>(pml4_phys)));
-        if (!(pml4->entries[i4] & PageFlags::Present)) {
-            PageTable* pdpt = alloc_table();
-            if (!pdpt) return false;
-            pml4->entries[i4] = make_pte(reinterpret_cast<uint64_t>(pdpt),
-                                         PageFlags::Present | PageFlags::Writable);
-        }
-        PageTable* pdpt = static_cast<PageTable*>(early_phys_to_virt(
-            pte_phys_addr(pml4->entries[i4])));
-        if (!(pdpt->entries[i3] & PageFlags::Present)) {
-            PageTable* pd = alloc_table();
-            if (!pd) return false;
-            pdpt->entries[i3] = make_pte(reinterpret_cast<uint64_t>(pd),
-                                         PageFlags::Present | PageFlags::Writable);
-        }
-        PageTable* pd = static_cast<PageTable*>(early_phys_to_virt(
-            pte_phys_addr(pdpt->entries[i3])));
-        // Limine often maps the kernel with 2MB huge pages. If the PD entry
-        // is a huge page, we must replace it with a real Page Table before
-        // installing 4K PTEs — otherwise we'd write PTEs into kernel code.
-        if (pd->entries[i2] & PageFlags::Huge) {
-            PageTable* pt_phys = alloc_table();
-            if (!pt_phys) return false;
-            uint64_t huge_pa = pte_phys_addr(pd->entries[i2]);
-            uint64_t huge_flags = pd->entries[i2] & ~PageFlags::Huge;
-            pd->entries[i2] = make_pte(reinterpret_cast<uint64_t>(pt_phys),
-                                       PageFlags::Present | PageFlags::Writable);
-            // Pre-fill the new PT with 4K entries covering the same 2MB range.
-            // pt_phys is a physical address — convert via HHDM to access.
-            PageTable* pt_virt = static_cast<PageTable*>(early_phys_to_virt(
-                reinterpret_cast<uint64_t>(pt_phys)));
-            for (int j = 0; j < 512; j++) {
-                pt_virt->entries[j] = make_pte(huge_pa + j * PAGE_SIZE,
-                                                huge_flags);
-            }
-        } else if (!(pd->entries[i2] & PageFlags::Present)) {
-            PageTable* pt = alloc_table();
-            if (!pt) return false;
-            pd->entries[i2] = make_pte(reinterpret_cast<uint64_t>(pt),
-                                       PageFlags::Present | PageFlags::Writable);
-        }
-        PageTable* pt = static_cast<PageTable*>(early_phys_to_virt(
-            pte_phys_addr(pd->entries[i2])));
-        pt->entries[i1] = make_pte(cur_pa, PageFlags::Present | PageFlags::Writable | extra_flags);
+    uint64_t* pml4 = hhdm_ptr(pml4_phys);
+
+    // PML4 -> PDPT
+    if (!(pml4[i4] & PageFlags::Present)) {
+        uint64_t pdpt_phys = alloc_table_phys();
+        if (!pdpt_phys) return false;
+        pml4[i4] = make_pte(pdpt_phys, PageFlags::Present | PageFlags::Writable);
     }
+    uint64_t* pdpt = hhdm_ptr(pte_phys_addr(pml4[i4]));
+
+    // PDPT -> PD
+    if (!(pdpt[i3] & PageFlags::Present)) {
+        uint64_t pd_phys = alloc_table_phys();
+        if (!pd_phys) return false;
+        pdpt[i3] = make_pte(pd_phys, PageFlags::Present | PageFlags::Writable);
+    }
+    uint64_t* pd = hhdm_ptr(pte_phys_addr(pdpt[i3]));
+
+    // PD may be a huge page (2MB) — split it before adding 4K PTEs
+    if (pd[i2] & PageFlags::Huge) {
+        uint64_t huge_pa = pte_phys_addr(pd[i2]);
+        uint64_t huge_flags = pd[i2] & ~PageFlags::Huge;
+
+        uint64_t pt_phys = alloc_table_phys();
+        if (!pt_phys) return false;
+
+        uint64_t* pt_virt = hhdm_ptr(pt_phys);
+        for (int j = 0; j < 512; j++) {
+            pt_virt[j] = make_pte(huge_pa + j * PAGE_SIZE, huge_flags);
+        }
+
+        pd[i2] = make_pte(pt_phys, PageFlags::Present | PageFlags::Writable);
+    } else if (!(pd[i2] & PageFlags::Present)) {
+        uint64_t pt_phys = alloc_table_phys();
+        if (!pt_phys) return false;
+        pd[i2] = make_pte(pt_phys, PageFlags::Present | PageFlags::Writable);
+    }
+
+    // PT -> leaf entry
+    uint64_t* pt = hhdm_ptr(pte_phys_addr(pd[i2]));
+    *pte_out = &pt[i1];
     return true;
 }
 
@@ -127,33 +86,123 @@ void paging_init(
 
     uint64_t old_cr3;
     asm volatile("mov %%cr3, %0" : "=r"(old_cr3));
-    PageTable* old_pml4 = static_cast<PageTable*>(early_phys_to_virt(old_cr3));
+    uint64_t* old_pml4 = hhdm_ptr(old_cr3);
 
-    // Build new PML4: copy ALL Limine entries EXCEPT the kernel entry,
-    // which we zero out so map_4k_pages creates fresh PDPT/PD/PT.
-    PageTable* new_pml4_phys = alloc_table();
-    if (!new_pml4_phys) { while (1) asm volatile("cli; hlt"); }
-    uint64_t* new_pml4 = static_cast<uint64_t*>(early_phys_to_virt(
-        reinterpret_cast<uint64_t>(new_pml4_phys)));
+    // Build new PML4
+    uint64_t new_pml4_phys = alloc_table_phys();
+    if (!new_pml4_phys) KPANIC("paging_init: failed to allocate PML4");
+    uint64_t* new_pml4 = hhdm_ptr(new_pml4_phys);
+
+    // Copy ALL Limine entries EXCEPT the kernel's PML4 entry
     uint16_t ki4 = pml4_index(kernel_virt_base);
     for (int i = 0; i < 512; i++) {
-        new_pml4[i] = (i == ki4) ? 0 : old_pml4->entries[i];
+        new_pml4[i] = (i == ki4) ? 0 : old_pml4[i];
     }
 
+    // Map kernel pages as 4K mappings
+    uint64_t kernel_pages = (kernel_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     klog("Paging: mapping kernel (");
-    klog_hex(kernel_size);
-    klog(" bytes) into new page tables...\n");
+    klog_hex(kernel_pages);
+    klog(" bytes)...\n");
 
-    uint64_t kernel_pages_4k = (kernel_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-    bool ok = map_4k_pages(new_pml4_phys, kernel_virt_base, kernel_phys_base,
-                           kernel_pages_4k, 0);
-    if (!ok) {
-        klog("Paging: FAILED\n");
-        while (1) asm volatile("cli; hlt");
+    for (uint64_t off = 0; off < kernel_pages; off += PAGE_SIZE) {
+        uint64_t va = kernel_virt_base + off;
+        uint64_t pa = kernel_phys_base + off;
+        uint64_t* pte = nullptr;
+        if (!walk_create(new_pml4_phys, va, &pte)) {
+            KPANIC("paging_init: OOM during kernel mapping");
+        }
+        *pte = make_pte(pa, PageFlags::Present | PageFlags::Writable);
     }
 
-    klog("Paging: loading new page tables...\n");
-    uint64_t new_cr3 = reinterpret_cast<uint64_t>(new_pml4_phys);
-    asm volatile("mov %0, %%cr3" :: "r"(new_cr3) : "memory");
+    // Map direct-map region (DIRECT_MAP_BASE -> phys 0)
+    // Use 2MB huge pages for efficiency. Map 128GB range.
+    klog("Paging: mapping direct map...\n");
+    for (uint64_t pa = 0; pa < 0x2000000000ULL; pa += LARGE_PAGE_SIZE) {
+        uint64_t va = DIRECT_MAP_BASE + pa;
+        uint16_t i4 = pml4_index(va);
+        uint16_t i3 = pdpt_index(va);
+        uint16_t i2 = pd_index(va);
+
+        if (!(new_pml4[i4] & PageFlags::Present)) {
+            uint64_t pdpt = alloc_table_phys();
+            if (!pdpt) break;
+            new_pml4[i4] = make_pte(pdpt, PageFlags::Present | PageFlags::Writable);
+        }
+        uint64_t* pdpt = hhdm_ptr(pte_phys_addr(new_pml4[i4]));
+
+        if (!(pdpt[i3] & PageFlags::Present)) {
+            uint64_t pd = alloc_table_phys();
+            if (!pd) break;
+            pdpt[i3] = make_pte(pd, PageFlags::Present | PageFlags::Writable);
+        }
+        uint64_t* pd = hhdm_ptr(pte_phys_addr(pdpt[i3]));
+
+        pd[i2] = make_pte(pa, PageFlags::Present | PageFlags::Writable | PageFlags::Huge);
+    }
+
+    // Load new page tables
+    klog("Paging: loading CR3...\n");
+    asm volatile("mov %0, %%cr3" :: "r"(new_pml4_phys) : "memory");
     klog("Paging: new page tables active\n");
+}
+
+void paging_save_kernel_template() {
+    uint64_t cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
+    g_kernel_template_pml4 = cr3;
+    klog("Paging: kernel PML4 template saved at ");
+    klog_hex(cr3); klog("\n");
+}
+
+uint64_t paging_kernel_pml4_template() {
+    return g_kernel_template_pml4;
+}
+
+bool page_table_map(uint64_t pml4_phys, uint64_t va, uint64_t pa, uint64_t flags) {
+    uint64_t* pte = nullptr;
+    if (!walk_create(pml4_phys, va, &pte)) return false;
+    *pte = make_pte(pa, flags);
+    asm volatile("invlpg (%0)" :: "r"(va) : "memory");
+    return true;
+}
+
+uint64_t page_table_unmap(uint64_t pml4_phys, uint64_t va) {
+    uint16_t i4 = pml4_index(va);
+    uint16_t i3 = pdpt_index(va);
+    uint16_t i2 = pd_index(va);
+    uint16_t i1 = pt_index(va);
+
+    uint64_t* pml4 = hhdm_ptr(pml4_phys);
+    if (!(pml4[i4] & PageFlags::Present)) return 0;
+    uint64_t* pdpt = hhdm_ptr(pte_phys_addr(pml4[i4]));
+    if (!(pdpt[i3] & PageFlags::Present)) return 0;
+    uint64_t* pd = hhdm_ptr(pte_phys_addr(pdpt[i3]));
+    if (pd[i2] & PageFlags::Huge) return 0;
+    if (!(pd[i2] & PageFlags::Present)) return 0;
+    uint64_t* pt = hhdm_ptr(pte_phys_addr(pd[i2]));
+    if (!(pt[i1] & PageFlags::Present)) return 0;
+
+    uint64_t old_pa = pte_phys_addr(pt[i1]);
+    pt[i1] = 0;
+    asm volatile("invlpg (%0)" :: "r"(va) : "memory");
+    return old_pa;
+}
+
+uint64_t page_table_lookup(uint64_t pml4_phys, uint64_t va) {
+    uint16_t i4 = pml4_index(va);
+    uint16_t i3 = pdpt_index(va);
+    uint16_t i2 = pd_index(va);
+    uint16_t i1 = pt_index(va);
+
+    uint64_t* pml4 = hhdm_ptr(pml4_phys);
+    if (!(pml4[i4] & PageFlags::Present)) return 0;
+    uint64_t* pdpt = hhdm_ptr(pte_phys_addr(pml4[i4]));
+    if (!(pdpt[i3] & PageFlags::Present)) return 0;
+    uint64_t* pd = hhdm_ptr(pte_phys_addr(pdpt[i3]));
+    if (pd[i2] & PageFlags::Huge) return 0;
+    if (!(pd[i2] & PageFlags::Present)) return 0;
+    uint64_t* pt = hhdm_ptr(pte_phys_addr(pd[i2]));
+    if (!(pt[i1] & PageFlags::Present)) return 0;
+    return pte_phys_addr(pt[i1]);
 }
