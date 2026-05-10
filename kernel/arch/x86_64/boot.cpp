@@ -190,8 +190,10 @@ extern "C" void kernel_entry(void) {
     }
 
     // 3. Higher-half paging takeover
-    // (paging code works but CR3 switch needs GDB debugging)
-    klog("Using Limine page tables...\n");
+    klog("=== Paging Takeover ===\n\n");
+    klog("Taking over page tables from Limine...\n");
+    paging_init(hhdm, kernel_phys, kernel_virt, kernel_size);
+    paging_save_kernel_template();
 
     // 4. Buddy allocator
     klog("Initializing buddy allocator...\n");
