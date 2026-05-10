@@ -18,6 +18,7 @@ cc_library(
         "syscall_entry.S",
         "timer.cpp",
         "trampoline.S",
+        "usermode.S",
     ],
     hdrs = [
         "acpi.hpp",
@@ -30,6 +31,7 @@ cc_library(
         "msr.hpp",
         "syscall.hpp",
         "timer.hpp",
+        "usermode.hpp",
     ],
     deps = [
         "//kernel/core/mm:mm",
