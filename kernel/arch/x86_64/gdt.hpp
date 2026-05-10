@@ -19,3 +19,4 @@ struct GDTR {
 
 void gdt_init();
 void tss_init();
+void tss_set_rsp0(uint64_t rsp0);

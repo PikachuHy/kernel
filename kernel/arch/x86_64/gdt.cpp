@@ -1,7 +1,9 @@
 #include "kernel/arch/x86_64/gdt.hpp"
 #include <stddef.h>
 #include "kernel/arch/x86_64/paging.hpp"
+#include "kernel/core/mm/bitmap_alloc.hpp"
 #include "kernel/lib/klog.hpp"
+#include "kernel/lib/panic.hpp"
 
 namespace {
 
@@ -79,6 +81,18 @@ void tss_init() {
     }
     tss->io_bitmap_offset = sizeof(TSS);
 
+    // Allocate a kernel interrupt stack for ring-3 -> ring-0 transitions.
+    // When the CPU traps from ring 3 to ring 0, it loads RSP from tss->rsp0.
+    void* kstack_phys = bitmap_alloc_page();
+    if (!kstack_phys) KPANIC("TSS: failed to allocate kernel interrupt stack");
+    // Use 2 pages for the kernel stack (8KB)
+    void* kstack2_phys = bitmap_alloc_page();
+    if (!kstack2_phys) KPANIC("TSS: failed to allocate 2nd kstack page");
+
+    uint64_t kstack_base = reinterpret_cast<uint64_t>(kstack_phys);
+    // Stack grows down from the top of the 8KB region
+    tss->rsp0 = DIRECT_MAP_BASE + kstack_base + PAGE_SIZE * 2;
+
     uint8_t* bitmap = &g_tss_data[sizeof(TSS)];
     for (int i = 0; i < 8192; i++) bitmap[i] = 0xFF;
     g_tss_data[sizeof(g_tss_data) - 1] = 0xFF;
@@ -99,5 +113,12 @@ void tss_init() {
         : "memory"
     );
 
-    klog("TSS: loaded (I/O bitmap: all ports denied from ring 3)\n");
+    klog("TSS: loaded, RSP0=");
+    klog_hex(tss->rsp0);
+    klog(" (I/O bitmap: all ports denied from ring 3)\n");
+}
+
+void tss_set_rsp0(uint64_t rsp0) {
+    TSS* tss = reinterpret_cast<TSS*>(&g_tss_data[0]);
+    tss->rsp0 = rsp0;
 }
