@@ -20,6 +20,11 @@ constexpr uint32_t IA32_CSTAR  = 0xC0000083;
 constexpr uint32_t IA32_SFMASK = 0xC0000084;
 
 namespace {
+
+// Global handle table used as fallback for backward-compat wrappers.
+// Will be replaced by per-process handle tables in Task 10.
+HandleTable g_handle_table;
+
 syscall_handler_t g_handler = nullptr;
 
 // ── Syscall handlers ────────────────────────────────────────────
@@ -161,7 +166,8 @@ extern "C" uint64_t syscall_dispatcher(uint64_t num, uint64_t a1, uint64_t a2,
 } // namespace
 
 void syscall_init() {
-    handle_table_init();
+    g_handle_table.Init();
+    handle_table_set_fallback(&g_handle_table);
     init_syscall_table();
 
     uint64_t efer = x86::rdmsr(IA32_EFER);

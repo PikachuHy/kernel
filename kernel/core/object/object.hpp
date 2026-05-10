@@ -6,7 +6,8 @@ public:
     enum class Type : uint8_t {
         Channel,
         Port,
-        // Future: Process, Thread, VMO, Interrupt, Resource
+        Process,
+        Vmo,
     };
 
     Type type() const { return type_; }
