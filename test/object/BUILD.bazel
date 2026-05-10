@@ -36,6 +36,7 @@ cc_test(
         "port_test.cpp",
         "//kernel/core/object:port.cpp",
         "//kernel/core/object:object.cpp",
+        "//kernel/core/object:handle_table.cpp",
     ],
     deps = [
         "//kernel/core/mm:slab_hdrs",

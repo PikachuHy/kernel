@@ -22,21 +22,21 @@ int Port::Accept(handle_t* out_channel) {
     return 0;
 }
 
-int Port::Connect(Port* port, handle_t* out_client_chan) {
+int Port::Connect(Port* port, HandleTable& handles, handle_t* out_client_chan) {
     Channel* ch = static_cast<Channel*>(kmalloc(sizeof(Channel)));
     if (!ch) return -1;
     new (ch) Channel();
 
-    handle_t a = handle_alloc(ch, Rights{.mask = Rights::Read | Rights::Write |
+    handle_t a = handles.Alloc(ch, Rights{.mask = Rights::Read | Rights::Write |
                                                  Rights::Duplicate | Rights::Transfer});
-    handle_t b = handle_alloc(ch, Rights{.mask = Rights::Read | Rights::Write |
+    handle_t b = handles.Alloc(ch, Rights{.mask = Rights::Read | Rights::Write |
                                                  Rights::Duplicate | Rights::Transfer});
     ch->Release(); // handles own the ref
 
     Conn* conn = static_cast<Conn*>(kmalloc(sizeof(Conn)));
     if (!conn) {
-        handle_free(a);
-        handle_free(b);
+        handles.Free(a);
+        handles.Free(b);
         return -1;
     }
     conn->channel = b;

@@ -13,7 +13,7 @@ public:
 
     int Accept(handle_t* out_channel);
 
-    static int Connect(Port* port, handle_t* out_client_chan);
+    static int Connect(Port* port, HandleTable& handles, handle_t* out_client_chan);
 
 private:
     SpinLock lock_;

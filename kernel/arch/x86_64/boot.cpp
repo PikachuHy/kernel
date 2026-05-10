@@ -22,6 +22,7 @@
 #include "kernel/core/object/handle_table.hpp"
 #include "kernel/core/object/channel.hpp"
 #include "kernel/core/object/port.hpp"
+#include "kernel/core/object/process.hpp"
 
 // Placement new (defined in kernel/core/object/port.cpp — re-declared here for boot.cpp's usage)
 void* operator new(size_t, void* p) noexcept;
@@ -359,7 +360,7 @@ extern "C" void kernel_entry(void) {
         klog("[ipc-client] found port, connecting...\n");
 
         handle_t my_chan;
-        Port::Connect(port, &my_chan);
+        Port::Connect(port, current_thread()->process->handles, &my_chan);
         klog("[ipc-client] Connected to 'demo'\n");
 
         const char* msg = "hello kernel IPC!";

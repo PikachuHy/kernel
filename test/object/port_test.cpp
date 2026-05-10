@@ -11,21 +11,16 @@ void* kmalloc(size_t n) {
     return p;
 }
 void kfree(void*) {}
-void handle_table_init() {}
-handle_t handle_alloc(KernelObject* obj, Rights r) {
-    static handle_t next = 1;
-    (void)obj; (void)r;
-    return next++;
-}
-void handle_free(handle_t) {}
-KernelObject* handle_lookup(handle_t, Rights, Rights*) { return nullptr; }
+// HandleTable used by all tests (re-initialized via g_handle_used reset)
+static HandleTable g_test_ht;
 
 TEST(PortTest, CreateAndAccept) {
     g_used = 0;
+    g_test_ht.Init();
     Port port;
 
     handle_t client_chan;
-    EXPECT_EQ(Port::Connect(&port, &client_chan), 0);
+    EXPECT_EQ(Port::Connect(&port, g_test_ht, &client_chan), 0);
     EXPECT_NE(client_chan, INVALID_HANDLE);
 
     handle_t server_chan;
@@ -50,10 +45,11 @@ TEST(PortTest, NameRegistry) {
 
 TEST(PortTest, MultipleConnections) {
     g_used = 0;
+    g_test_ht.Init();
     Port port;
     handle_t c1, c2, s1, s2;
-    EXPECT_EQ(Port::Connect(&port, &c1), 0);
-    EXPECT_EQ(Port::Connect(&port, &c2), 0);
+    EXPECT_EQ(Port::Connect(&port, g_test_ht, &c1), 0);
+    EXPECT_EQ(Port::Connect(&port, g_test_ht, &c2), 0);
     EXPECT_EQ(port.Accept(&s1), 0);
     EXPECT_EQ(port.Accept(&s2), 0);
     EXPECT_NE(s1, s2);

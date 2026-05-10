@@ -18,3 +18,11 @@ constexpr uint64_t SYSCALL_PORT_CREATE    = 20;
 constexpr uint64_t SYSCALL_PORT_REGISTER  = 21;
 constexpr uint64_t SYSCALL_PORT_CONNECT   = 22;
 constexpr uint64_t SYSCALL_PORT_ACCEPT    = 23;
+
+// Process
+constexpr uint64_t SYSCALL_PROCESS_CREATE  = 30;
+constexpr uint64_t SYSCALL_PROCESS_EXIT    = 31;
+
+// VMO
+constexpr uint64_t SYSCALL_VMO_CREATE      = 40;
+constexpr uint64_t SYSCALL_VMO_MAP         = 41;
