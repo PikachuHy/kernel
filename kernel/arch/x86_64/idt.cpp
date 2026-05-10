@@ -1,4 +1,6 @@
 #include "kernel/arch/x86_64/idt.hpp"
+#include "kernel/core/sched/sched.hpp"
+#include "kernel/core/object/process.hpp"
 #include "kernel/lib/klog.hpp"
 #include "kernel/lib/panic.hpp"
 #include <stdint.h>
@@ -71,6 +73,36 @@ void idt_set_gate(uint8_t vector, uint64_t handler, uint8_t ist, uint8_t type_at
 namespace {
 
 extern "C" void exception_handler(InterruptFrame* frame) {
+    // #PF: try to handle via demand paging / COW
+    if (frame->int_no == 14) {
+        uint64_t cr2;
+        asm volatile("mov %%cr2, %0" : "=r"(cr2));
+        Thread* cur = current_thread();
+        if (cur && cur->process) {
+            bool was_write = (frame->err_code & 0x2) != 0;
+            bool handled = cur->process->HandlePageFault(cr2, was_write);
+            if (handled) {
+                return;  // fault resolved, resume execution
+            }
+        }
+
+        // Couldn't handle — fall through to panic
+        klog("\n=== PAGE FAULT (unhandled) ===\n");
+        klog(" in process ");
+        klog(cur && cur->process ? cur->process->name : "(none)");
+        klog("\nfault addr: ");
+        klog_hex(cr2);
+        klog("\nRIP: ");
+        klog_hex(frame->rip);
+        klog("\nerror code: ");
+        klog_hex(frame->err_code);
+        klog("\n");
+        while (1) {
+            asm volatile("cli; hlt");
+        }
+    }
+
+    // All other exceptions: print and halt
     klog("\n=== EXCEPTION ===\n");
     if (frame->int_no < 22) {
         klog(exception_names[frame->int_no]);
@@ -82,13 +114,6 @@ extern "C" void exception_handler(InterruptFrame* frame) {
     klog_hex(frame->err_code);
     klog("\nRIP: ");
     klog_hex(frame->rip);
-    if (frame->int_no == 14) {
-        uint64_t cr2;
-        asm volatile("mov %%cr2, %0" : "=r"(cr2));
-        klog("CR2 (fault addr): ");
-        klog_hex(cr2);
-        klog("\n");
-    }
 
     while (1) {
         asm volatile("cli; hlt");
