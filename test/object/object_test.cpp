@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 #include "kernel/core/object/object.hpp"
+#include "kernel/core/object/rights.hpp"
+#include "kernel/core/object/handle_table.hpp"
 
 // Concrete subclass for testing
 class TestObj : public KernelObject {
@@ -54,9 +56,6 @@ TEST(RightsTest, EmptyMask) {
 // ── Handle table tests ──────────────────────────────────────────
 // Stub handle_table_init for host (kmalloc already stubbed above)
 void handle_table_init();
-handle_t handle_alloc(KernelObject*, Rights);
-void handle_free(handle_t);
-KernelObject* handle_lookup(handle_t, Rights = Rights{}, Rights* = nullptr);
 
 // Simple fixed-buffer implementation for host testing
 namespace {

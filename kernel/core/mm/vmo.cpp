@@ -3,8 +3,12 @@
 #include "kernel/core/mm/slab.hpp"
 #include "kernel/lib/panic.hpp"
 
-// Placement new (freestanding — no <new> header)
+// Placement new: use system <new> when available, otherwise provide our own.
+#if __has_include(<new>)
+#include <new>
+#else
 inline void* operator new(size_t, void* p) noexcept { return p; }
+#endif
 
 uint64_t Vmo::s_direct_map_offset_ = DIRECT_MAP_BASE;
 

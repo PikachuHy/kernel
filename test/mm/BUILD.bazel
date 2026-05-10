@@ -23,6 +23,7 @@ cc_library(
         "//kernel/core/object:object_hdrs",
         "//kernel/lib:klib",
     ],
+    visibility = ["//test:__subpackages__"],
 )
 
 cc_test(

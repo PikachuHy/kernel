@@ -3,9 +3,11 @@ load("@rules_cc//cc:defs.bzl", "cc_test")
 cc_test(
     name = "object_test",
     size = "small",
-    srcs = ["object_test.cpp"],
+    srcs = ["object_test.cpp", "//kernel/core/object:object.cpp"],
     deps = [
+        "//kernel/core/mm:slab_hdrs",
         "//kernel/core/object:object_hdrs",
+        "//kernel/lib:klib",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],
@@ -14,9 +16,14 @@ cc_test(
 cc_test(
     name = "channel_test",
     size = "small",
-    srcs = ["channel_test.cpp"],
+    srcs = [
+        "channel_test.cpp",
+        "//kernel/core/object:channel.cpp",
+    ],
     deps = [
+        "//kernel/core/mm:slab_hdrs",
         "//kernel/core/object:object_hdrs",
+        "//kernel/lib:klib",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],
@@ -25,9 +32,37 @@ cc_test(
 cc_test(
     name = "port_test",
     size = "small",
-    srcs = ["port_test.cpp"],
+    srcs = [
+        "port_test.cpp",
+        "//kernel/core/object:port.cpp",
+        "//kernel/core/object:object.cpp",
+    ],
     deps = [
+        "//kernel/core/mm:slab_hdrs",
         "//kernel/core/object:object_hdrs",
+        "//kernel/lib:klib",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "process_test",
+    size = "small",
+    srcs = [
+        "process_test.cpp",
+        "//kernel/core/object:process.cpp",
+        "//kernel/core/object:object.cpp",
+    ],
+    deps = [
+        "//kernel/arch/x86_64:paging_hdrs",
+        "//kernel/core/mm:bitmap_alloc_hdrs",
+        "//kernel/core/mm:slab_hdrs",
+        "//kernel/core/mm:vmo_hdrs",
+        "//kernel/core/mm:vmm_hdrs",
+        "//kernel/core/object:object_hdrs",
+        "//kernel/core/sched:sched_hdrs",
+        "//kernel/lib:klib",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
     ],

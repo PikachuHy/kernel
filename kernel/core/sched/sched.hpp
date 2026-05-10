@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+class Process;
+
 constexpr int SCHED_PRIORITIES = 8;
 constexpr int SCHED_DEFAULT_TIMESLICE_MS = 10;
 constexpr int MAX_THREAD_NAME = 16;
@@ -33,6 +35,9 @@ struct Thread {
     // Stack management
     void*     stack_bottom;  // low address (for freeing)
     size_t    stack_size;    // total stack allocation size
+
+    Process*   process;      // owning process (nullptr = idle thread / no process)
+    Thread*    proc_next;    // next in process->threads list
 };
 
 static_assert(offsetof(Thread, rsp) == 0,

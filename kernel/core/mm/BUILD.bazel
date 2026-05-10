@@ -49,3 +49,33 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
 )
+
+cc_library(
+    name = "vmo_hdrs",
+    hdrs = ["vmo.hpp"],
+    deps = [
+        "//kernel/arch/x86_64:paging_hdrs",
+        "//kernel/core/object:object_hdrs",
+        "//kernel/lib:klib",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "slab_hdrs",
+    hdrs = ["//kernel/core/mm:slab.hpp"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "bitmap_alloc_hdrs",
+    hdrs = ["//kernel/core/mm:bitmap_alloc.hpp"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "vmm_hdrs",
+    hdrs = ["vmm.hpp"],
+    deps = [":vmo_hdrs"],
+    visibility = ["//visibility:public"],
+)
