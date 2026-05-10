@@ -200,3 +200,25 @@ Process* elf_load(const void* elf_data, size_t elf_size,
     *out_thread = thread;
     return proc;
 }
+
+// ── elf_load_init_process ────────────────────────────────────────
+// Symbols provided by kernel/init/init_embed.o via llvm-objcopy.
+extern "C" uint8_t _binary_init_bin_start[];
+extern "C" uint8_t _binary_init_bin_end[];
+
+extern "C" void elf_load_init_process() {
+    uint64_t init_size = _binary_init_bin_end - _binary_init_bin_start;
+    klog("Loading init process (");
+    klog_hex(init_size);
+    klog(" bytes)...\n");
+
+    Thread* init_thread = nullptr;
+    Process* init_proc = elf_load(_binary_init_bin_start, init_size,
+                                   "init", 1, &init_thread);
+    if (init_proc && init_thread) {
+        klog("  Init process loaded, starting...\n");
+        thread_start(init_thread);
+    } else {
+        klog("  FAILED to load init process\n");
+    }
+}

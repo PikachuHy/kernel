@@ -1,0 +1,45 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+# The init ELF — cross-compiled for x86-64 freestanding user-space.
+# This runs in ring 3 at 0x400000, so we use -mcmodel=small (not kernel).
+# We compile with clang++ directly (not the Bazel CC toolchain) to avoid
+# kernel-specific flags like -mno-red-zone, -mno-sse, -mcmodel=kernel.
+genrule(
+    name = "init_elf",
+    srcs = [
+        "init.cpp",
+        "init.ld",
+    ],
+    outs = ["init.elf"],
+    cmd = "/usr/bin/clang++ " +
+          "-target x86_64-unknown-elf " +
+          "-ffreestanding -nostdlib " +
+          "-std=c++26 " +
+          "-fno-exceptions -fno-rtti " +
+          "-Wall -Wextra -Werror " +
+          "-O2 " +
+          "-mcmodel=small " +
+          "-T $(location init.ld) " +
+          "-o $@ " +
+          "$(location init.cpp) " +
+          "-Wl,-z,max-page-size=0x1000 " +
+          "-static " +
+          "--ld-path=/usr/local/bin/lld-wrapper.sh",
+    visibility = ["//visibility:private"],
+)
+
+# Convert the init ELF binary into a linkable ELF object so the kernel
+# can embed it.  We copy the file to a short, clean name first (init.bin)
+# so that llvm-objcopy creates predictable symbols:
+#   _binary_init_bin_start, _binary_init_bin_end, _binary_init_bin_size.
+genrule(
+    name = "init_embed",
+    srcs = [":init.elf"],
+    outs = ["init_embed.o"],
+    cmd = "cp $(SRCS) $(@D)/init.bin && " +
+          "cd $(@D) && " +
+          "/usr/local/opt/llvm/bin/llvm-objcopy " +
+          "-I binary -O elf64-x86-64 -B i386:x86-64 " +
+          "init.bin $$PWD/init_embed.o",
+    visibility = ["//visibility:public"],
+)

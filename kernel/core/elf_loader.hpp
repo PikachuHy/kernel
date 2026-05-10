@@ -13,3 +13,7 @@ struct Thread;
 Process* elf_load(const void* elf_data, size_t elf_size,
                   const char* proc_name, uint8_t priority,
                   Thread** out_thread);
+
+// Load and start the embedded init process.
+// Defined in elf_loader.cpp, references the init_embed object symbols.
+extern "C" void elf_load_init_process();

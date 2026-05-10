@@ -376,6 +376,12 @@ extern "C" void kernel_entry(void) {
     // Hook timer to scheduler for preemption (every 10ms)
     timer_periodic(10000, timer_preempt_callback);
 
+    // ── Embedded init process ──────────────────────────────────────
+    // elf_load_init_process() loads the embedded init.elf and starts it.
+    // It is defined in kernel/core/elf_loader.cpp (extern "C").
+    extern void elf_load_init_process();
+    elf_load_init_process();
+
     klog("Scheduler starting...\n\n");
     asm volatile("sti");
     scheduler_start();  // never returns
