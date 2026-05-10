@@ -116,7 +116,8 @@ struct RunQueue {
 // ── Scheduler API ──────────────────────────────────────────
 
 // Threads: create, start (make ready), yield (voluntary), exit
-Thread* thread_create(void (*entry)(), const char* name, uint8_t priority);
+Thread* thread_create(void (*entry)(), const char* name, uint8_t priority,
+                      Process* process = nullptr);
 void    thread_start(Thread* t);
 void    thread_yield();
 [[noreturn]] void thread_exit();

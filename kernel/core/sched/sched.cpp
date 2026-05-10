@@ -12,6 +12,7 @@
 #include "kernel/core/mm/slab.hpp"
 #include "kernel/core/mm/bitmap_alloc.hpp"
 #include "kernel/arch/x86_64/paging.hpp"
+#include "kernel/core/object/process.hpp"
 #include "kernel/lib/klog.hpp"
 #include "kernel/lib/panic.hpp"
 
@@ -25,6 +26,7 @@ static Thread*  s_idle_threads[MAX_CPUS];
 static uint64_t g_hhdm = 0;
 static bool     g_sched_initialized = false;
 static uint32_t g_next_tid = 1;
+static Process* s_kernel_process = nullptr;
 
 // ── Idle thread ──────────────────────────────────────────────────────
 // The idle thread runs when no other thread is ready on this CPU.
@@ -93,6 +95,8 @@ static Thread* create_idle_thread(uint32_t cpu_id) {
     t->next          = nullptr;
     t->stack_bottom  = stack_phys;
     t->stack_size    = PAGE_SIZE;
+    t->process       = nullptr;  // idle threads have no process
+    t->proc_next     = nullptr;
 
     return t;
 }
@@ -116,6 +120,13 @@ void scheduler_init(uint64_t hhdm) {
         s_idle_threads[i]   = idle;
         s_current_threads[i] = idle;
     }
+
+    // Create kernel process -- owns all kernel threads
+    s_kernel_process = Process::Create("kernel");
+    if (!s_kernel_process) KPANIC("sched: failed to create kernel process");
+
+    // Set as fallback for backward-compat handle_alloc/free/lookup
+    handle_table_set_fallback(&s_kernel_process->handles);
 
     g_sched_initialized = true;
     klog("scheduler: ready\n");
@@ -224,12 +235,23 @@ void scheduler_schedule() {
     // Update the current thread pointer
     s_current_threads[0] = next;
 
+    // Reload CR3 if crossing process boundary
+    if (prev && next->process != prev->process) {
+        uint64_t new_cr3 = next->process
+            ? next->process->pml4_phys
+            : paging_kernel_pml4_template();
+        if (new_cr3) {
+            asm volatile("mov %0, %%cr3" :: "r"(new_cr3) : "memory");
+        }
+    }
+
     // Perform the context switch
     switch_to(prev, next);
 }
 
 // ── Thread creation ──────────────────────────────────────────────────
-Thread* thread_create(void (*entry)(), const char* name, uint8_t priority) {
+Thread* thread_create(void (*entry)(), const char* name, uint8_t priority,
+                      Process* process) {
     if (!g_sched_initialized) return nullptr;
 
     Thread* t = static_cast<Thread*>(kmalloc(sizeof(Thread)));
@@ -275,6 +297,13 @@ Thread* thread_create(void (*entry)(), const char* name, uint8_t priority) {
     t->next          = nullptr;
     t->stack_bottom  = stack_phys;
     t->stack_size    = PAGE_SIZE;
+
+    t->process   = process;
+    t->proc_next = nullptr;
+
+    if (process) {
+        process->AddThread(t);
+    }
 
     return t;
 }
