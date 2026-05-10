@@ -2,6 +2,11 @@ load("@rules_cc//cc:defs.bzl", "cc_binary")
 
 cc_binary(
     name = "kernel",
+    srcs = [
+        "core/elf_loader.hpp",
+        "core/elf_loader.cpp",
+        "core/elf_trampoline.S",
+    ],
     deps = [
         "//kernel/arch/x86_64:arch",
         "//kernel/lib:klib",
