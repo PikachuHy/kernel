@@ -10,6 +10,7 @@ bazel_dep(name = "bazel_features", version = "1.43.0")
 bazel_dep(name = "protobuf", version = "27.0", repo_name = "com_google_protobuf")
 bazel_dep(name = "rules_license", version = "1.0.0")
 bazel_dep(name = "googletest", version = "1.17.0", repo_name = "com_google_googletest")
+local_path_override(module_name = "googletest", path = "./third_party/googletest")
 
 register_toolchains("//toolchain:x86_64_elf_toolchain")
 register_toolchains("//toolchain:host_toolchain")

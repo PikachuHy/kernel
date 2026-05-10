@@ -1,5 +1,7 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
+exports_files(["object.cpp"], visibility = ["//test:__subpackages__"])
+
 cc_library(
     name = "object",
     srcs = ["object.cpp", "handle_table.cpp", "channel.cpp", "port.cpp"],

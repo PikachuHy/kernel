@@ -3,6 +3,7 @@
 
 void KernelObject::Release() {
     if (--ref_count_ == 0) {
+        this->~KernelObject();
         kfree(this);
     }
 }

@@ -1,6 +1,6 @@
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-exports_files(["bitmap_alloc.cpp", "bitmap_alloc.hpp", "buddy.cpp", "buddy.hpp", "pmm.cpp", "pmm.hpp", "slab.cpp", "slab.hpp"], visibility = ["//test:__subpackages__"])
+exports_files(["bitmap_alloc.cpp", "bitmap_alloc.hpp", "buddy.cpp", "buddy.hpp", "new_delete.cpp", "pmm.cpp", "pmm.hpp", "slab.cpp", "slab.hpp", "vmo.cpp", "vmo.hpp"], visibility = ["//test:__subpackages__"])
 
 cc_library(
     name = "mm",
@@ -19,6 +19,19 @@ cc_library(
     ],
     deps = [
         "//kernel/arch/x86_64:paging_hdrs",
+        "//kernel/lib:klib",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "vmo",
+    srcs = ["vmo.cpp"],
+    hdrs = ["vmo.hpp"],
+    deps = [
+        ":mm",
+        "//kernel/arch/x86_64:paging_hdrs",
+        "//kernel/core/object:object_hdrs",
         "//kernel/lib:klib",
     ],
     visibility = ["//visibility:public"],

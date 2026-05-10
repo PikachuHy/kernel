@@ -6,6 +6,7 @@ cc_binary(
         "//kernel/arch/x86_64:arch",
         "//kernel/lib:klib",
         "//kernel/core/mm:mm",
+        "//kernel/core/mm:vmo",
         "//kernel/core/sched:sched",
     ],
     additional_linker_inputs = ["//kernel/arch/x86_64:linker_script"],
