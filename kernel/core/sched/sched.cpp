@@ -11,8 +11,10 @@
 #include "kernel/arch/x86_64/smp.hpp"
 #include "kernel/core/mm/slab.hpp"
 #include "kernel/core/mm/bitmap_alloc.hpp"
+#include "kernel/core/mm/buddy.hpp"
 #include "kernel/arch/x86_64/paging.hpp"
 #include "kernel/core/object/process.hpp"
+#include "kernel/arch/x86_64/gdt.hpp"
 #include "kernel/lib/klog.hpp"
 #include "kernel/lib/panic.hpp"
 
@@ -97,6 +99,7 @@ static Thread* create_idle_thread(uint32_t cpu_id) {
     t->stack_size    = PAGE_SIZE;
     t->process       = nullptr;  // idle threads have no process
     t->proc_next     = nullptr;
+    t->kernel_stack  = 0;        // idle uses shared TSS kernel stack
 
     return t;
 }
@@ -161,14 +164,15 @@ void scheduler_start() {
     }
 
     // If the first thread belongs to a process, load its page tables.
-    // This must happen BEFORE jumping to the thread — otherwise
-    // user-space accesses fault on the kernel-only Limine PML4.
     if (first->process && first->process->pml4_phys) {
         uint64_t cr3 = first->process->pml4_phys;
         asm volatile("mov %0, %%cr3" :: "r"(cr3) : "memory");
-        klog("scheduler: loaded CR3 for process '");
-        klog(first->process->name);
-        klog("'\n");
+    }
+
+    // If the thread has a kernel stack, set TSS RSP0.
+    if (first->kernel_stack) {
+        uint64_t rsp0 = DIRECT_MAP_BASE + first->kernel_stack + PAGE_SIZE * 4;
+        tss_set_rsp0(rsp0);
     }
 
     // Load the thread's saved stack pointer and restore all callee-saved
@@ -255,6 +259,12 @@ void scheduler_schedule() {
         }
     }
 
+    // Update TSS RSP0 if the next thread has its own kernel stack.
+    if (next->kernel_stack) {
+        uint64_t rsp0 = DIRECT_MAP_BASE + next->kernel_stack + PAGE_SIZE * 4;
+        tss_set_rsp0(rsp0);
+    }
+
     // Perform the context switch
     switch_to(prev, next);
 }
@@ -269,6 +279,15 @@ Thread* thread_create(void (*entry)(), const char* name, uint8_t priority,
 
     void* stack_phys = bitmap_alloc_page();
     if (!stack_phys) {
+        kfree(t);
+        return nullptr;
+    }
+
+    // Allocate a 16KB kernel interrupt stack for ring-3 → ring-0 transitions.
+    // buddy_alloc_pages(2) = 4 pages = 16KB.
+    void* kstack_phys = buddy_alloc_pages(2);
+    if (!kstack_phys) {
+        bitmap_free_page(stack_phys);
         kfree(t);
         return nullptr;
     }
@@ -307,6 +326,8 @@ Thread* thread_create(void (*entry)(), const char* name, uint8_t priority,
     t->next          = nullptr;
     t->stack_bottom  = stack_phys;
     t->stack_size    = PAGE_SIZE;
+
+    t->kernel_stack  = reinterpret_cast<uint64_t>(kstack_phys);
 
     t->process   = process;
     t->proc_next = nullptr;

@@ -36,6 +36,9 @@ struct Thread {
     void*     stack_bottom;  // low address (for freeing)
     size_t    stack_size;    // total stack allocation size
 
+    // Kernel interrupt stack (for ring-3 → ring-0 transitions)
+    uint64_t  kernel_stack;  // physical address of kernel stack (16KB)
+
     Process*   process;      // owning process (nullptr = idle thread / no process)
     Thread*    proc_next;    // next in process->threads list
 };

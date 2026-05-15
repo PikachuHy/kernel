@@ -85,7 +85,6 @@ static volatile bool bsp_done __attribute__((unused)) = false;
 extern uint8_t _end;
 
 // Timer preemption callback — drives scheduler_tick() from LAPIC timer.
-__attribute__((unused))
 static bool timer_preempt_callback(uint64_t) {
     scheduler_tick();
     return true;
@@ -306,7 +305,7 @@ extern "C" void kernel_entry(void) {
     scheduler_init(hhdm);
 
     // Hook timer to scheduler for preemption (every 10ms)
-    //timer_periodic(10000, timer_preempt_callback);  // FIXME: TSS RSP0 sharing issue with ring-3
+    timer_periodic(10000, timer_preempt_callback);
 
     // ── Embedded init process ──────────────────────────────────────
     // elf_load_init_process() loads the embedded init.elf and starts it.
