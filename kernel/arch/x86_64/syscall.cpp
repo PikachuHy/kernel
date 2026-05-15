@@ -99,16 +99,62 @@ uint64_t sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
 
 uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
     Process* proc = current_process();
-    if (!proc) return -1;
+    if (!proc) return static_cast<uint64_t>(-1);
 
     handle_t h = static_cast<handle_t>(a1);
     KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read});
-    if (!obj || obj->type() != KernelObject::Type::Channel) return -1;
+    if (!obj || obj->type() != KernelObject::Type::Channel)
+        return static_cast<uint64_t>(-1);
 
-    size_t out_len;
-    int rc = static_cast<Channel*>(obj)->Read(
-        reinterpret_cast<void*>(a2), a3, &out_len, nullptr, 0, nullptr);
-    return (rc == 0) ? out_len : rc;
+    size_t out_len = 0;
+    size_t out_handles = 0;
+    int rc;
+
+    // Block until a message is available
+    while (true) {
+        rc = static_cast<Channel*>(obj)->Read(
+            reinterpret_cast<void*>(a2), a3, &out_len,
+            nullptr, 0, &out_handles);
+        if (rc != -2) break;  // -2 = empty
+        thread_yield();       // give up CPU, wait for message
+    }
+
+    return (rc == 0) ? out_len : static_cast<uint64_t>(rc);
+}
+
+uint64_t sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
+    Process* proc = current_process();
+    if (!proc) return static_cast<uint64_t>(-1);
+
+    handle_t h = static_cast<handle_t>(a1);
+    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read});
+    if (!obj || obj->type() != KernelObject::Type::Channel)
+        return static_cast<uint64_t>(-1);
+
+    // Args packed in struct (4-register ABI can't pass 5 scalars)
+    struct ChannelReadHandleArgs {
+        handle_t* handle_buf;
+        size_t    buf_capacity;
+    };
+    auto* args = reinterpret_cast<const ChannelReadHandleArgs*>(a2);
+
+    size_t out_len = 0;
+    size_t out_handles = 0;
+    int rc;
+
+    // Block until a message is available
+    while (true) {
+        rc = static_cast<Channel*>(obj)->Read(
+            reinterpret_cast<void*>(a3), a4, &out_len,
+            args ? args->handle_buf : nullptr,
+            args ? args->buf_capacity : 0,
+            &out_handles);
+        if (rc != -2) break;
+        thread_yield();
+    }
+
+    if (rc == 0) return (out_handles << 32) | (out_len & 0xFFFFFFFFULL);
+    return static_cast<uint64_t>(rc);
 }
 
 uint64_t sys_port_create(uint64_t, uint64_t, uint64_t, uint64_t) {
@@ -228,7 +274,7 @@ uint64_t sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
 
 using syscall_fn_t = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t);
 
-constexpr int MAX_SYSCALL = 44;
+constexpr int MAX_SYSCALL = 52;
 syscall_fn_t g_syscall_table[MAX_SYSCALL];
 
 void init_syscall_table() {
@@ -237,7 +283,8 @@ void init_syscall_table() {
     g_syscall_table[SYSCALL_HANDLE_DUP]     = sys_handle_dup;
     g_syscall_table[SYSCALL_CHANNEL_CREATE] = sys_channel_create;
     g_syscall_table[SYSCALL_CHANNEL_WRITE]  = sys_channel_write;
-    g_syscall_table[SYSCALL_CHANNEL_READ]   = sys_channel_read;
+    g_syscall_table[SYSCALL_CHANNEL_READ]          = sys_channel_read;
+    g_syscall_table[SYSCALL_CHANNEL_READ_HANDLES]  = sys_channel_read_handles;
     g_syscall_table[SYSCALL_PORT_CREATE]    = sys_port_create;
     g_syscall_table[SYSCALL_PORT_REGISTER]  = sys_port_register;
     g_syscall_table[SYSCALL_PORT_CONNECT]   = sys_port_connect;

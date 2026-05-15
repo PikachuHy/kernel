@@ -14,6 +14,7 @@ constexpr uint64_t SYSCALL_HANDLE_DUP     = 2;
 constexpr uint64_t SYSCALL_CHANNEL_CREATE = 10;
 constexpr uint64_t SYSCALL_CHANNEL_WRITE  = 11;
 constexpr uint64_t SYSCALL_CHANNEL_READ   = 12;
+constexpr uint64_t SYSCALL_CHANNEL_READ_HANDLES = 13;
 constexpr uint64_t SYSCALL_PORT_CREATE    = 20;
 constexpr uint64_t SYSCALL_PORT_REGISTER  = 21;
 constexpr uint64_t SYSCALL_PORT_CONNECT   = 22;
