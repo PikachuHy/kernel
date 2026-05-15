@@ -29,6 +29,7 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 | 4: SMP | `docs/superpowers/plans/2026-05-05-phase-4-smp.md` | Done |
 | 5: Scheduler | `docs/superpowers/plans/2026-05-05-phase-5-scheduler.md` | Done |
 | 6: Object Manager + IPC | `docs/superpowers/plans/2026-05-05-phase-6-object-ipc.md` | Done |
+| 7: VMM + Process | `docs/superpowers/plans/2026-05-10-phase-7-vmm-process.md` | Done |
 | Fix Known Issues | `docs/superpowers/plans/2026-05-05-fix-known-issues.md` | Done (TSS+buddy; paging deferred) |
 
 ## Build / Test / Lint
@@ -49,18 +50,20 @@ bash scripts/run.sh
 
 ## Known Issues
 
-- **paging_init**: CR3 reload causes crash with Limine's 2MB huge pages. Kernel uses Limine page tables. `map_4k_pages` has huge-page handling code but paging_init is deferred.
-- **Handle table**: Currently global (1024 handles, spinlock-protected). Moves to per-process handle tables in Phase 7 (VMM + Process objects).
+- **paging_init**: CR3 reload causes crash with Limine's 2MB huge pages. Kernel uses Limine page tables via `paging_save_kernel_template()`.
+- **Timer preemption**: disabled for ring-3 threads due to TSS RSP0 stack sharing with context switches.
+- **Channel IPC**: read returns -2 for ring-3 init due to handle transfer timing (kernel-mode channels work).
 
 ## Architecture
 
 ```
 kernel/
-├── arch/x86_64/        # boot, gdt, idt, apic, ioapic, irq, acpi, smp, trampoline, timer, syscall, paging, linker script
+├── arch/x86_64/        # boot, gdt, idt, apic, ioapic, irq, acpi, smp, trampoline, timer, syscall, paging, usermode, linker script
 ├── core/
-│   ├── mm/             # pmm, bitmap_alloc, buddy, slab, new_delete
+│   ├── mm/             # pmm, bitmap_alloc, buddy, slab, vmo, vmm, new_delete
 │   ├── sched/          # scheduler — thread, run queue, context switch
-│   └── object/         # KernelObject, handle table, rights, channel, port
+│   └── object/         # KernelObject, handle table, rights, channel, port, process
+├── init/               # init process (ring-3 ELF), linker script
 ├── lib/                # klog, panic, serial, spinlock
 ├── BUILD.bazel
 test/
