@@ -1,14 +1,35 @@
 #include "kernel/core/object/handle_table.hpp"
+#include "kernel/core/mm/buddy.hpp"
+#include "kernel/arch/x86_64/paging.hpp"
 
 // ── HandleTable ─────────────────────────────────────────────────────
 
 void HandleTable::Init() {
+    // Allocate 4 pages (16KB) for 1024 HandleEntry entries.
+    // buddy_alloc_pages returns a physical address; convert to virtual
+    // via the direct map for kernel access.
+    void* phys = buddy_alloc_pages(2);
+    if (!phys) {
+        free_head_ = 0;
+        return;
+    }
+    entries_ = reinterpret_cast<HandleEntry*>(
+        DIRECT_MAP_BASE + reinterpret_cast<uint64_t>(phys));
+
     for (handle_t i = 1; i < MAX_HANDLES - 1; i++) {
         entries_[i].obj = reinterpret_cast<KernelObject*>(
             static_cast<uintptr_t>(i + 1));
     }
     entries_[MAX_HANDLES - 1].obj = nullptr;
     free_head_ = 1;
+}
+
+void HandleTable::Destroy() {
+    if (entries_) {
+        uint64_t phys = reinterpret_cast<uint64_t>(entries_) - DIRECT_MAP_BASE;
+        buddy_free_pages(reinterpret_cast<void*>(phys), 2);
+        entries_ = nullptr;
+    }
 }
 
 handle_t HandleTable::Alloc(KernelObject* obj, Rights rights) {

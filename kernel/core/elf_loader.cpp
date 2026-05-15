@@ -107,15 +107,29 @@ Process* elf_load(const void* elf_data, size_t elf_size,
         if (ph->flags & PF_W) vm_flags |= VM_WRITE;
         if (ph->flags & PF_X) vm_flags |= VM_EXEC;
 
-        Vmo* vmo = Vmo::CreateAnonymous(size_pg);
-        if (!vmo) {
-            klog("elf_load: VMO alloc failed\n");
-            proc->Release();
-            return nullptr;
+        // Check if a region already covers this VA (overlapping PT_LOAD
+        // segments). If so, copy data into the existing VMO instead of
+        // creating a new one.
+        VmRegion* existing = proc->FindRegion(va_page);
+        Vmo* vmo;
+        bool own_vmo = true;
+
+        if (existing && existing->base_va == va_page) {
+            // Overlapping segment — merge data into the existing VMO.
+            vmo = existing->vmo;
+            own_vmo = false;
+            // Merge VM flags (e.g. R+X from .text + R from .rodata -> R+WX)
+            existing->flags |= vm_flags;
+        } else {
+            vmo = Vmo::CreateAnonymous(size_pg);
+            if (!vmo) {
+                klog("elf_load: VMO alloc failed\n");
+                proc->Release();
+                return nullptr;
+            }
         }
 
         // Copy segment data from ELF into the VMO.
-        // Track byte offsets explicitly to handle non-page-aligned segments.
         const auto* src      = reinterpret_cast<const uint8_t*>(elf_data) + ph->offset;
         uint64_t    vmo_off  = va_off;
         uint64_t    src_off  = 0;
@@ -125,7 +139,7 @@ Process* elf_load(const void* elf_data, size_t elf_size,
             uint64_t phys = vmo->GetPage(vmo_off, true);
             if (!phys) {
                 klog("elf_load: GetPage failed\n");
-                vmo->Release();
+                if (own_vmo) vmo->Release();
                 proc->Release();
                 return nullptr;
             }
@@ -144,16 +158,18 @@ Process* elf_load(const void* elf_data, size_t elf_size,
             remaining -= copy_sz;
         }
 
-        // Map the VMO into the process address space
-        if (!proc->Map(vmo, va_page, 0, size_pg, vm_flags)) {
-            klog("elf_load: Map failed at ");
-            klog_hex(va_page); klog("\n");
-            vmo->Release();
-            proc->Release();
-            return nullptr;
+        // Map the VMO into the process address space (only if new).
+        if (own_vmo) {
+            if (!proc->Map(vmo, va_page, 0, size_pg, vm_flags)) {
+                klog("elf_load: Map failed at ");
+                klog_hex(va_page); klog("\n");
+                vmo->Release();
+                proc->Release();
+                return nullptr;
+            }
         }
 
-        vmo->Release(); // Map holds the ref now
+        if (own_vmo) vmo->Release(); // Map holds the ref now
     }
 
     // ── Create user stack ──────────────────────────────────────────

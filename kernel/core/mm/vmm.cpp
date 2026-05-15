@@ -1,5 +1,5 @@
 #include "kernel/core/mm/vmm.hpp"
-#include "kernel/core/mm/bitmap_alloc.hpp"
+#include "kernel/core/mm/buddy.hpp"
 #include "kernel/core/mm/slab.hpp"
 #include "kernel/arch/x86_64/paging.hpp"
 
@@ -9,7 +9,7 @@ uint64_t vmm_create_user_pml4() {
     uint64_t template_pml4 = paging_kernel_pml4_template();
     if (!template_pml4) return 0;
 
-    void* new_pml4_phys = bitmap_alloc_page();
+    void* new_pml4_phys = buddy_alloc_pages(0);
     if (!new_pml4_phys) return 0;
 
     uint64_t np = reinterpret_cast<uint64_t>(new_pml4_phys);
@@ -20,7 +20,10 @@ uint64_t vmm_create_user_pml4() {
     for (int i = 256; i < 512; i++) {
         dst[i] = src[i];
     }
-    // User-half entries (0-255) are already zeroed by bitmap_alloc_page
+    // Zero user-half entries (buddy_alloc_pages does NOT zero memory)
+    for (int i = 0; i < 256; i++) {
+        dst[i] = 0;
+    }
     return np;
 }
 
@@ -43,13 +46,13 @@ void vmm_destroy_user_pml4(uint64_t pml4_phys) {
                 if (pd[i2] & PageFlags::Huge) continue;
                 if (!(pd[i2] & PageFlags::Present)) continue;
                 uint64_t pt_phys = pte_phys_addr(pd[i2]);
-                bitmap_free_page(reinterpret_cast<void*>(pt_phys));
+                buddy_free_pages(reinterpret_cast<void*>(pt_phys), 0);
             }
-            bitmap_free_page(reinterpret_cast<void*>(pd_phys));
+            buddy_free_pages(reinterpret_cast<void*>(pd_phys), 0);
         }
-        bitmap_free_page(reinterpret_cast<void*>(pdpt_phys));
+        buddy_free_pages(reinterpret_cast<void*>(pdpt_phys), 0);
     }
-    bitmap_free_page(reinterpret_cast<void*>(pml4_phys));
+    buddy_free_pages(reinterpret_cast<void*>(pml4_phys), 0);
 }
 
 // ── VmRegion list operations ────────────────────────────────────────
@@ -57,12 +60,11 @@ void vmm_destroy_user_pml4(uint64_t pml4_phys) {
 bool vmm_insert_region(VmRegion** head, VmRegion* region) {
     uint64_t end = region->base_va + region->size;
 
-    // Find insertion point, checking for overlap
     VmRegion** prev = head;
     while (*prev) {
         uint64_t prev_end = (*prev)->base_va + (*prev)->size;
-        if (end <= (*prev)->base_va) break;        // region ends before this entry
-        if (region->base_va < prev_end) return false; // overlap
+        if (end <= (*prev)->base_va) break;
+        if (region->base_va < prev_end) return false;
         prev = &(*prev)->next;
     }
 

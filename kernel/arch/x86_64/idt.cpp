@@ -81,9 +81,7 @@ extern "C" void exception_handler(InterruptFrame* frame) {
         if (cur && cur->process) {
             bool was_write = (frame->err_code & 0x2) != 0;
             bool handled = cur->process->HandlePageFault(cr2, was_write);
-            if (handled) {
-                return;  // fault resolved, resume execution
-            }
+            if (handled) return;
         }
 
         // Couldn't handle — fall through to panic

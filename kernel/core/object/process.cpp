@@ -12,13 +12,20 @@ inline void* operator new(size_t, void* p) noexcept { return p; }
 #include "kernel/core/mm/bitmap_alloc.hpp"
 #include "kernel/arch/x86_64/paging.hpp"
 
-Process* Process::Create(const char* name) {
-    uint64_t pml4 = vmm_create_user_pml4();
+Process* Process::Create(const char* name, bool kernel_process) {
+    uint64_t pml4;
+    if (kernel_process) {
+        // Kernel process shares the kernel PML4 template (no user mappings).
+        pml4 = paging_kernel_pml4_template();
+    } else {
+        // User process gets its own PML4 with fresh user-half entries.
+        pml4 = vmm_create_user_pml4();
+    }
     if (!pml4) return nullptr;
 
     void* mem = kmalloc(sizeof(Process));
     if (!mem) {
-        vmm_destroy_user_pml4(pml4);
+        if (!kernel_process) vmm_destroy_user_pml4(pml4);
         return nullptr;
     }
     return new (mem) Process(name, pml4);
@@ -64,14 +71,13 @@ Process::~Process() {
         }
     }
 
-    // Free page tables
-    vmm_destroy_user_pml4(pml4_phys);
+    // Free the handle table backing array
+    handles.Destroy();
 }
 
 bool Process::Map(Vmo* vmo, uint64_t va, uint64_t vmo_offset,
                   uint64_t size, uint64_t flags) {
-    // Validate range
-    if (va + size < va) return false;  // overflow check
+    if (va + size < va) return false;
     if (size == 0) return false;
 
     VmRegion* r = static_cast<VmRegion*>(kmalloc(sizeof(VmRegion)));

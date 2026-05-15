@@ -122,7 +122,7 @@ void scheduler_init(uint64_t hhdm) {
     }
 
     // Create kernel process -- owns all kernel threads
-    s_kernel_process = Process::Create("kernel");
+    s_kernel_process = Process::Create("kernel", true);
     if (!s_kernel_process) KPANIC("sched: failed to create kernel process");
 
     // Set as fallback for backward-compat handle_alloc/free/lookup
@@ -156,9 +156,19 @@ void scheduler_start() {
     klog("'\n");
 
     // Convert rsp from physical to virtual if not already done
-    // (idle threads skip thread_start, so their rsp is still physical)
     if (first->rsp < g_hhdm) {
         first->rsp += g_hhdm;
+    }
+
+    // If the first thread belongs to a process, load its page tables.
+    // This must happen BEFORE jumping to the thread — otherwise
+    // user-space accesses fault on the kernel-only Limine PML4.
+    if (first->process && first->process->pml4_phys) {
+        uint64_t cr3 = first->process->pml4_phys;
+        asm volatile("mov %0, %%cr3" :: "r"(cr3) : "memory");
+        klog("scheduler: loaded CR3 for process '");
+        klog(first->process->name);
+        klog("'\n");
     }
 
     // Load the thread's saved stack pointer and restore all callee-saved

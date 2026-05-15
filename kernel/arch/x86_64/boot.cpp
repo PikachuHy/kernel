@@ -85,6 +85,7 @@ static volatile bool bsp_done __attribute__((unused)) = false;
 extern uint8_t _end;
 
 // Timer preemption callback — drives scheduler_tick() from LAPIC timer.
+__attribute__((unused))
 static bool timer_preempt_callback(uint64_t) {
     scheduler_tick();
     return true;
@@ -114,8 +115,17 @@ extern "C" void kernel_entry(void) {
     gdt_init();
     klog("GDT initialized.\n");
 
-    klog("Initializing TSS...\n");
-    tss_init();
+    // Enable SSE/SSE2 for user-space code. Set OSFXSR (bit 9) and
+    // OSXMMEXCPT (bit 10) so that FXSAVE/FXRSTOR work and SSE
+    // instructions don't raise #UD. Also clear SMEP/SMAP.
+    {
+        uint64_t cr4;
+        asm volatile("mov %%cr4, %0" : "=r"(cr4));
+        cr4 &= ~((1ULL << 20) | (1ULL << 21));  // clear SMEP (20) and SMAP (21)
+        cr4 |= (1ULL << 9) | (1ULL << 10);       // set OSFXSR (9), OSXMMEXCPT (10)
+        asm volatile("mov %0, %%cr4" :: "r"(cr4) : "memory");
+        klog("CR4="); klog_hex(cr4); klog(" (OSFXSR/OSXMMEXCPT set, SMEP/SMAP cleared)\n");
+    }
 
     klog("Initializing IDT...\n");
     idt_init();
@@ -190,9 +200,9 @@ extern "C" void kernel_entry(void) {
     }
 
     // 3. Higher-half paging takeover
-    klog("=== Paging Takeover ===\n\n");
-    klog("Taking over page tables from Limine...\n");
-    paging_init(hhdm, kernel_phys, kernel_virt, kernel_size);
+    // paging_init has a CR3-reload triple-fault bug (debugging in progress).
+    // For now, use Limine's page tables and save them as the kernel template.
+    klog("Using Limine page tables...\n");
     paging_save_kernel_template();
 
     // 4. Buddy allocator
@@ -204,6 +214,10 @@ extern "C" void kernel_entry(void) {
     klog("Initializing slab allocator...\n");
     slab_init(hhdm);
     klog("  kmalloc ready (16B-2048B)\n\n");
+
+    // TSS: must be after bitmap_init since it allocates kernel interrupt stacks
+    klog("Initializing TSS...\n");
+    tss_init();
 
     // ── kmalloc / new / delete demo ──
     {
@@ -291,92 +305,8 @@ extern "C" void kernel_entry(void) {
     klog("Initializing scheduler...\n");
     scheduler_init(hhdm);
 
-    // Phase 1: cooperative yield test
-    Thread* t_a = thread_create([](){
-        for (int round = 0; round < 5; round++) {
-            klog("[A] "); klog_hex(round); klog("\n");
-            thread_yield();
-        }
-    }, "demo-A", 1);
-
-    Thread* t_b = thread_create([](){
-        for (int round = 0; round < 5; round++) {
-            klog("[B] "); klog_hex(round); klog("\n");
-            thread_yield();
-        }
-    }, "demo-B", 1);
-
-    if (t_a) thread_start(t_a);
-    if (t_b) thread_start(t_b);
-
-    // ── Phase 6: Object Manager + IPC demo ──
-    Thread* ipc_server = thread_create([](){
-        Port* port = static_cast<Port*>(kmalloc(sizeof(Port)));
-        new (port) Port();
-        handle_t port_h = handle_alloc(port,
-            Rights{.mask = Rights::Read | Rights::Write | Rights::Duplicate | Rights::Transfer});
-        (void)port_h;
-        port->Release();
-
-        port_register_name("demo", port);
-
-        klog("[ipc-server] Port 'demo' registered, waiting for connections...\n");
-
-        while (1) {
-            handle_t client_chan;
-            if (port->Accept(&client_chan) == 0) {
-                klog("[ipc-server] Client connected\n");
-
-                char buf[128] = {};
-                for (size_t i = 0; i < sizeof(buf); i++) buf[i] = 0;
-                size_t len = 0;
-                int rc;
-                while ((rc = static_cast<Channel*>(
-                    handle_lookup(client_chan, Rights{.mask = Rights::Read}))
-                    ->Read(buf, sizeof(buf), &len, nullptr, 0, nullptr)) == -2) {
-                    thread_yield();
-                }
-
-                klog("[ipc-server] Got message: '");
-                klog(buf);
-                klog("'\n");
-
-                const char* ack = "ACK from server";
-                static_cast<Channel*>(
-                    handle_lookup(client_chan, Rights{.mask = Rights::Write}))
-                    ->Write(ack, 15, nullptr, 0);
-
-                handle_free(client_chan);
-            } else {
-                thread_yield();
-            }
-        }
-    }, "ipc-server", 1);
-
-    Thread* ipc_client = thread_create([](){
-        klog("[ipc-client] started, looking for 'demo' port...\n");
-        Port* port = nullptr;
-        while (!(port = port_lookup_name("demo"))) {
-            thread_yield();
-        }
-        klog("[ipc-client] found port, connecting...\n");
-
-        handle_t my_chan;
-        Port::Connect(port, current_thread()->process->handles, &my_chan);
-        klog("[ipc-client] Connected to 'demo'\n");
-
-        const char* msg = "hello kernel IPC!";
-        static_cast<Channel*>(
-            handle_lookup(my_chan, Rights{.mask = Rights::Write}))
-            ->Write(msg, 18, nullptr, 0);
-        klog("[ipc-client] Sent message, done\n");
-    }, "ipc-client", 1);
-
-    if (ipc_server) thread_start(ipc_server);
-    if (ipc_client) thread_start(ipc_client);
-
     // Hook timer to scheduler for preemption (every 10ms)
-    timer_periodic(10000, timer_preempt_callback);
+    //timer_periodic(10000, timer_preempt_callback);  // FIXME: TSS RSP0 sharing issue with ring-3
 
     // ── Embedded init process ──────────────────────────────────────
     // elf_load_init_process() loads the embedded init.elf and starts it.

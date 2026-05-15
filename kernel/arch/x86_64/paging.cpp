@@ -1,5 +1,6 @@
 #include "kernel/arch/x86_64/paging.hpp"
 #include "kernel/core/mm/bitmap_alloc.hpp"
+#include "kernel/core/mm/buddy.hpp"
 #include "kernel/lib/klog.hpp"
 #include "kernel/lib/panic.hpp"
 
@@ -9,16 +10,18 @@ uint64_t g_hhdm = 0;
 uint64_t g_kernel_template_pml4 = 0;
 
 inline uint64_t* hhdm_ptr(uint64_t phys) {
-    return reinterpret_cast<uint64_t*>(g_hhdm + phys);
+    return reinterpret_cast<uint64_t*>(DIRECT_MAP_BASE + phys);
 }
 
 // Allocate a zeroed page table page. Returns physical address, or 0 on OOM.
+// Uses buddy_alloc_pages for runtime allocations (page fault handling).
 static uint64_t alloc_table_phys() {
-    void* phys = bitmap_alloc_page();
+    void* phys = buddy_alloc_pages(0);
     if (!phys) return 0;
-    uint64_t* virt = hhdm_ptr(reinterpret_cast<uint64_t>(phys));
+    uint64_t phys_addr = reinterpret_cast<uint64_t>(phys);
+    uint64_t* virt = reinterpret_cast<uint64_t*>(DIRECT_MAP_BASE + phys_addr);
     for (int i = 0; i < 512; i++) virt[i] = 0;
-    return reinterpret_cast<uint64_t>(phys);
+    return phys_addr;
 }
 
 // Walk the page table for `va`, creating intermediate page tables as needed.
@@ -30,13 +33,19 @@ static bool walk_create(uint64_t pml4_phys, uint64_t va, uint64_t** pte_out) {
     uint16_t i2 = pd_index(va);
     uint16_t i1 = pt_index(va);
 
+    // Intermediate page tables need User|Writable so that the hardware
+    // page-table walker can descend into them from ring 3. Without User,
+    // the walk stops at the first non-User intermediate entry and the CPU
+    // raises a #PF even though the leaf PTE grants access.
+    constexpr uint64_t kIntFlags = PageFlags::Present | PageFlags::Writable | PageFlags::User;
+
     uint64_t* pml4 = hhdm_ptr(pml4_phys);
 
     // PML4 -> PDPT
     if (!(pml4[i4] & PageFlags::Present)) {
         uint64_t pdpt_phys = alloc_table_phys();
         if (!pdpt_phys) return false;
-        pml4[i4] = make_pte(pdpt_phys, PageFlags::Present | PageFlags::Writable);
+        pml4[i4] = make_pte(pdpt_phys, kIntFlags);
     }
     uint64_t* pdpt = hhdm_ptr(pte_phys_addr(pml4[i4]));
 
@@ -44,7 +53,7 @@ static bool walk_create(uint64_t pml4_phys, uint64_t va, uint64_t** pte_out) {
     if (!(pdpt[i3] & PageFlags::Present)) {
         uint64_t pd_phys = alloc_table_phys();
         if (!pd_phys) return false;
-        pdpt[i3] = make_pte(pd_phys, PageFlags::Present | PageFlags::Writable);
+        pdpt[i3] = make_pte(pd_phys, kIntFlags);
     }
     uint64_t* pd = hhdm_ptr(pte_phys_addr(pdpt[i3]));
 
@@ -61,11 +70,11 @@ static bool walk_create(uint64_t pml4_phys, uint64_t va, uint64_t** pte_out) {
             pt_virt[j] = make_pte(huge_pa + j * PAGE_SIZE, huge_flags);
         }
 
-        pd[i2] = make_pte(pt_phys, PageFlags::Present | PageFlags::Writable);
+        pd[i2] = make_pte(pt_phys, kIntFlags);
     } else if (!(pd[i2] & PageFlags::Present)) {
         uint64_t pt_phys = alloc_table_phys();
         if (!pt_phys) return false;
-        pd[i2] = make_pte(pt_phys, PageFlags::Present | PageFlags::Writable);
+        pd[i2] = make_pte(pt_phys, kIntFlags);
     }
 
     // PT -> leaf entry
@@ -143,7 +152,14 @@ void paging_init(
 
     // Load new page tables
     klog("Paging: loading CR3...\n");
-    asm volatile("mov %0, %%cr3" :: "r"(new_pml4_phys) : "memory");
+    // Debug: verify PML4 entries before CR3 reload
+    uint64_t cr3_val = new_pml4_phys;
+    klog("Paging: CR3 = "); klog_hex(cr3_val); klog("\n");
+    uint64_t* dbg_pml4 = hhdm_ptr(new_pml4_phys);
+    klog("Paging: PML4[511](kernel) = "); klog_hex(dbg_pml4[511]); klog("\n");
+    klog("Paging: PML4[256](dmap)  = "); klog_hex(dbg_pml4[256]); klog("\n");
+    klog("Paging: PML4[0](user)    = "); klog_hex(dbg_pml4[0]); klog("\n");
+    asm volatile("mov %0, %%cr3" :: "r"(cr3_val) : "memory");
     klog("Paging: new page tables active\n");
 }
 

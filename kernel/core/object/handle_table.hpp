@@ -26,10 +26,13 @@ public:
     // into out_objs/out_handles. Returns actual count written.
     int ForEach(KernelObject** out_objs, handle_t* out_handles, int max);
 
+    // Free the backing array (called during Process teardown).
+    void Destroy();
+
 private:
-    HandleEntry entries_[MAX_HANDLES];
-    handle_t    free_head_;
-    SpinLock    lock_;
+    HandleEntry* entries_;   // buddy-allocated array, 4 pages (16KB for 1024 entries)
+    handle_t     free_head_;
+    SpinLock     lock_;
 };
 
 // ── Temporary backward-compatible globals ──────────────────────────

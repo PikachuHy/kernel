@@ -18,6 +18,7 @@ genrule(
           "-fno-exceptions -fno-rtti " +
           "-Wall -Wextra -Werror " +
           "-O2 " +
+          "-mno-sse -mno-sse2 -mgeneral-regs-only " +
           "-mcmodel=small " +
           "-T $(location init.ld) " +
           "-o $@ " +

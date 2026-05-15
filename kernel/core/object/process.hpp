@@ -9,7 +9,9 @@ class Vmo;
 
 class Process : public KernelObject {
 public:
-    static Process* Create(const char* name);
+    // Create a process. If kernel_process is true, shares the kernel PML4
+    // template. Otherwise allocates a fresh PML4 via vmm_create_user_pml4().
+    static Process* Create(const char* name, bool kernel_process = false);
 
     uint64_t    pml4_phys;    // CR3 value for this process
     VmRegion*   regions;      // sorted intrusive linked list of VmRegions
