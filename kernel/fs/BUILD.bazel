@@ -1,0 +1,16 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+cc_library(
+    name = "fs",
+    srcs = ["mount.cpp"],
+    hdrs = [
+        "mount.hpp",
+        "protocol.hpp",
+    ],
+    deps = [
+        "//kernel/core/object:object_hdrs",
+        "//kernel/core/mm:vmm_hdrs",
+        "//kernel/lib:klib",
+    ],
+    visibility = ["//visibility:public"],
+)

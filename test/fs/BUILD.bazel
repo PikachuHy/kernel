@@ -1,0 +1,23 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "protocol_test",
+    srcs = ["protocol_test.cpp"],
+    deps = [
+        "//kernel/fs:fs",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+    size = "small",
+)
+
+cc_test(
+    name = "mount_test",
+    srcs = ["mount_test.cpp"],
+    deps = [
+        "//kernel/fs:fs",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+    ],
+    size = "small",
+)
