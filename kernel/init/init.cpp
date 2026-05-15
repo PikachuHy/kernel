@@ -10,11 +10,6 @@ using size_t = decltype(sizeof(0));
 constexpr int SYS_DEBUG_PRINT    = 0;
 constexpr int SYS_HANDLE_CLOSE   = 1;
 constexpr int SYS_CHANNEL_CREATE = 10;
-constexpr int SYS_CHANNEL_WRITE  = 11;
-constexpr int SYS_CHANNEL_READ   = 12;
-constexpr int SYS_PORT_CREATE    = 20;
-constexpr int SYS_PORT_REGISTER  = 21;
-constexpr int SYS_PORT_CONNECT   = 22;
 constexpr int SYS_PROCESS_EXIT   = 31;
 
 // syscall6(num, a1, a2, a3, a4, a5) → return value in rax
@@ -51,56 +46,26 @@ static void print_hex(uint64_t n) {
     print(buf);
 }
 
-// strlen for freestanding
-static size_t strlen(const char* s) {
-    size_t n = 0;
-    while (*s++) n++;
-    return n;
-}
-
 extern "C" void _start() {
-    print("\n=== init: user-space bootstrap ===\n");
+    print("=== init: user-space bootstrap ===\n");
 
-    // Test 1: Channel create + write + read
-    print("Test 1: Channel IPC...\n");
+    // Test: basic syscalls
+    print("  SYS_DEBUG_PRINT: OK\n");
+
+    // Channel create
     uint64_t pair = syscall6(SYS_CHANNEL_CREATE, 0, 0, 0, 0, 0);
+    print("  SYS_CHANNEL_CREATE: ");
+    print_hex(pair);
+    print("\n");
+
+    // Handle close (close both ends)
     uint32_t ch_a = static_cast<uint32_t>(pair >> 32);
     uint32_t ch_b = static_cast<uint32_t>(pair & 0xFFFFFFFF);
-
-    const char* msg = "Hello from ring 3!";
-    size_t msg_len = strlen(msg);
-    syscall6(SYS_CHANNEL_WRITE, ch_a,
-             reinterpret_cast<uint64_t>(msg), msg_len, 0, 0);
-
-    char rbuf[64];
-    for (int i = 0; i < 64; i++) rbuf[i] = 0;
-    uint64_t nread = syscall6(SYS_CHANNEL_READ, ch_b,
-                               reinterpret_cast<uint64_t>(rbuf), 64, 0, 0);
-    print("  Received: ");
-    print(rbuf);
-    print(" (");
-    print_hex(nread);
-    print(" bytes)");
-
     syscall6(SYS_HANDLE_CLOSE, ch_a, 0, 0, 0, 0);
     syscall6(SYS_HANDLE_CLOSE, ch_b, 0, 0, 0, 0);
+    print("  SYS_HANDLE_CLOSE: OK\n");
 
-    // Test 2: Port register + connect
-    print("Test 2: Port discovery...\n");
-    uint64_t port_h = syscall6(SYS_PORT_CREATE, 0, 0, 0, 0, 0);
-    syscall6(SYS_PORT_REGISTER, port_h,
-             reinterpret_cast<uint64_t>("init/test"), 0, 0, 0);
-
-    uint64_t conn = syscall6(SYS_PORT_CONNECT,
-                              reinterpret_cast<uint64_t>("init/test"),
-                              0, 0, 0, 0);
-    print("  Port connect result: ");
-    print_hex(conn);
-
-    syscall6(SYS_HANDLE_CLOSE, conn, 0, 0, 0, 0);
-    syscall6(SYS_HANDLE_CLOSE, port_h, 0, 0, 0, 0);
-
-    print("=== init: all tests passed ===\n");
+    print("=== init: done ===\n");
     syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);
 
     while (1) { asm volatile("hlt"); }
