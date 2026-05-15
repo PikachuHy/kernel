@@ -1,8 +1,9 @@
 #include "kernel/arch/x86_64/gdt.hpp"
 #include <stddef.h>
 #include "kernel/arch/x86_64/paging.hpp"
-#include "kernel/core/mm/bitmap_alloc.hpp"
+#include "kernel/core/mm/buddy.hpp"
 #include "kernel/lib/klog.hpp"
+#include "kernel/lib/panic.hpp"
 #include "kernel/lib/panic.hpp"
 
 namespace {
@@ -39,25 +40,28 @@ static uint8_t g_tss_data[sizeof(TSS) + 8192 + 1]
     __attribute__((aligned(PAGE_SIZE)));
 
 void gdt_init() {
+    // GDT layout chosen so that SYSRET computes correct CS/SS.
+    // SYSRET CS = (STAR[63:48] + 16) | 3 → (0x08+16)|3 = 0x1B (entry 3)
+    // SYSRET SS = (STAR[63:48] + 8)  | 3 → (0x08+8)|3  = 0x13 (entry 2)
     // 0: null
     set_entry(0, 0, 0, 0, 0);
-    // 1: kernel code (64-bit, ring 0)
+    // 1: kernel code 64-bit (0x08)
     set_entry(1, 0, 0xFFFFF, 0x9A, 0xA);
-    // 2: kernel data (ring 0)
-    set_entry(2, 0, 0xFFFFF, 0x92, 0xC);
-    // 3: user code (64-bit, ring 3) -- placeholder for Phase 5
+    // 2: user data (0x13) — DPL=3 for SYSRET SS compatibility
+    set_entry(2, 0, 0xFFFFF, 0xF2, 0xC);
+    // 3: user code 64-bit (0x1B)
     set_entry(3, 0, 0xFFFFF, 0xFA, 0xA);
-    // 4: user data (ring 3) -- placeholder for Phase 5
-    set_entry(4, 0, 0xFFFFF, 0xF2, 0xC);
-    // 5: TSS low (placeholder)
-    // 6: TSS high (placeholder)
+    // 4: kernel data (0x20)
+    set_entry(4, 0, 0xFFFFF, 0x92, 0xC);
+    // 5: TSS low
+    // 6: TSS high
 
     gdtr.limit = sizeof(GDTEntry) * GDT_ENTRIES - 1;
     gdtr.base = (uint64_t)&gdt[0];
 
     asm volatile(
         "lgdt (%0)\n"
-        "movw $0x10, %%ax\n"
+        "movw $0x20, %%ax\n"
         "movw %%ax, %%ds\n"
         "movw %%ax, %%es\n"
         "movw %%ax, %%fs\n"
@@ -81,17 +85,22 @@ void tss_init() {
     }
     tss->io_bitmap_offset = sizeof(TSS);
 
-    // Allocate a kernel interrupt stack for ring-3 -> ring-0 transitions.
-    // When the CPU traps from ring 3 to ring 0, it loads RSP from tss->rsp0.
-    void* kstack_phys = bitmap_alloc_page();
-    if (!kstack_phys) KPANIC("TSS: failed to allocate kernel interrupt stack");
-    // Use 2 pages for the kernel stack (8KB)
-    void* kstack2_phys = bitmap_alloc_page();
-    if (!kstack2_phys) KPANIC("TSS: failed to allocate 2nd kstack page");
+    // RSP0: shared kernel stack for ring-3 → ring-0 transitions.
+    void* kstack_phys = buddy_alloc_pages(2);  // 16KB
+    if (!kstack_phys) KPANIC("TSS: failed to allocate RSP0 stack");
+    tss->rsp0 = DIRECT_MAP_BASE + reinterpret_cast<uint64_t>(kstack_phys) + PAGE_SIZE * 4;
 
-    uint64_t kstack_base = reinterpret_cast<uint64_t>(kstack_phys);
-    // Stack grows down from the top of the 8KB region
-    tss->rsp0 = DIRECT_MAP_BASE + kstack_base + PAGE_SIZE * 2;
+    // IST1 (tss->ist[0]): dedicated stack for #PF (vector 14).
+    // Prevents deep HandlePageFault call chains from corrupting the
+    // IRET frame on the shared RSP0 stack.
+    void* pf_ist_phys = buddy_alloc_pages(2);  // 16KB
+    if (!pf_ist_phys) KPANIC("TSS: failed to allocate #PF IST stack");
+    tss->ist[0] = DIRECT_MAP_BASE + reinterpret_cast<uint64_t>(pf_ist_phys) + PAGE_SIZE * 4;
+
+    // IST2 (tss->ist[1]): dedicated stack for #DF (vector 8).
+    void* df_ist_phys = buddy_alloc_pages(2);  // 16KB
+    if (!df_ist_phys) KPANIC("TSS: failed to allocate #DF IST stack");
+    tss->ist[1] = DIRECT_MAP_BASE + reinterpret_cast<uint64_t>(df_ist_phys) + PAGE_SIZE * 4;
 
     uint8_t* bitmap = &g_tss_data[sizeof(TSS)];
     for (int i = 0; i < 8192; i++) bitmap[i] = 0xFF;
@@ -101,9 +110,6 @@ void tss_init() {
     uint64_t limit = sizeof(g_tss_data) - 1;
 
     set_entry(5, tss_addr & 0xFFFFFFFF, limit & 0xFFFFF, 0x89, 0);
-    // Entry 6 for a 64-bit TSS is a raw 8-byte value:
-    //   bits 0:31  = BASE[63:32]
-    //   bits 32:63 = reserved (must be 0)
     *reinterpret_cast<uint64_t*>(&gdt[6]) = (tss_addr >> 32) & 0xFFFFFFFF;
 
     asm volatile(
@@ -115,6 +121,10 @@ void tss_init() {
 
     klog("TSS: loaded, RSP0=");
     klog_hex(tss->rsp0);
+    klog(" IST1=");
+    klog_hex(tss->ist[0]);
+    klog(" IST2=");
+    klog_hex(tss->ist[1]);
     klog(" (I/O bitmap: all ports denied from ring 3)\n");
 }
 

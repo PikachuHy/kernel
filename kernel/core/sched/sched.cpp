@@ -50,11 +50,14 @@ static Thread* create_idle_thread(uint32_t cpu_id) {
     Thread* t = static_cast<Thread*>(kmalloc(sizeof(Thread)));
     if (!t) KPANIC("sched: failed to allocate idle Thread");
 
-    void* stack_phys = bitmap_alloc_page();
+    // Use a 16KB stack so timer interrupts don't overwrite the initial
+    // frame at the top. The ISR pushes ~200 bytes below the IRET frame;
+    // with a 4KB stack the initial frame at [top-72..top] is obliterated.
+    void* stack_phys = buddy_alloc_pages(2);  // 4 pages = 16KB
     if (!stack_phys) KPANIC("sched: failed to allocate idle stack");
 
-    uint64_t stack_virt = g_hhdm + reinterpret_cast<uint64_t>(stack_phys);
-    uint64_t stack_top  = stack_virt + PAGE_SIZE;
+    uint64_t stack_virt = DIRECT_MAP_BASE + reinterpret_cast<uint64_t>(stack_phys);
+    uint64_t stack_top  = stack_virt + PAGE_SIZE * 4;
 
     // ── Initial stack frame layout ──
     // From t->rsp (r15 slot) upward:
@@ -70,20 +73,30 @@ static Thread* create_idle_thread(uint32_t cpu_id) {
     //
     // Total overhead: 9 slots * 8 = 72 bytes above t->rsp.
 
-    // thread_exit: what idle_entry() returns to (should never happen,
-    // but present for correctness and consistent frame layout)
-    *reinterpret_cast<uint64_t*>(stack_top - 8) =
-        reinterpret_cast<uint64_t>(thread_exit);
-    // idle_entry: what switch_to/scheduler_start rets to
-    *reinterpret_cast<uint64_t*>(stack_top - 16) =
-        reinterpret_cast<uint64_t>(idle_entry);
-    // RFLAGS with IF=1 (interrupts on) -- idle sti/hlt/cli manages
-    // interrupts per iteration, but the saved RFLAGS should have IF set.
-    *reinterpret_cast<uint64_t*>(stack_top - 24) = 0x202ULL;
+    // Place the initial frame 4KB below the stack top. This reserves
+    // the top 4KB for interrupt frames (~200 bytes ISR + IRET frame),
+    // preventing the saved context from being overwritten.
+    uint64_t frame_base_virt = stack_top - PAGE_SIZE;  // 12KB from bottom
+    uint64_t frame_base_phys = reinterpret_cast<uint64_t>(stack_phys) + PAGE_SIZE * 3;
 
-    // rsp stored as physical offset; thread_start converts to virtual.
-    // For idle threads this means scheduler_start must also convert.
-    t->rsp           = reinterpret_cast<uint64_t>(stack_phys) + PAGE_SIZE - 72;
+    // rsp stored as physical offset (scheduler_start / thread_start convert).
+    // Frame layout (low to high from t->rsp):
+    //   [rsp+0]   r15            (zeroed by alloc)
+    //   [rsp+8]   r14            (zeroed)
+    //   [rsp+16]  r13            (zeroed)
+    //   [rsp+24]  r12            (zeroed)
+    //   [rsp+32]  rbp            (zeroed)
+    //   [rsp+40]  rbx            (zeroed)
+    //   [rsp+48]  RFLAGS = 0x202 (IF=1)
+    //   [rsp+56]  idle_entry     <- switch_to/scheduler_start rets here
+    //   [rsp+64]  thread_exit    <- fallback return
+    t->rsp = frame_base_phys;
+
+    *reinterpret_cast<uint64_t*>(frame_base_virt + 56) =
+        reinterpret_cast<uint64_t>(idle_entry);
+    *reinterpret_cast<uint64_t*>(frame_base_virt + 64) =
+        reinterpret_cast<uint64_t>(thread_exit);
+    *reinterpret_cast<uint64_t*>(frame_base_virt + 48) = 0x202ULL;
     t->rflags        = 0x202;
     t->state         = ThreadState::Running;
     t->priority      = 7;          // lowest priority
@@ -99,7 +112,11 @@ static Thread* create_idle_thread(uint32_t cpu_id) {
     t->stack_size    = PAGE_SIZE;
     t->process       = nullptr;  // idle threads have no process
     t->proc_next     = nullptr;
-    t->kernel_stack  = 0;        // idle uses shared TSS kernel stack
+
+    // Idle thread also gets a kernel stack for timer interrupts.
+    void* idle_kstack = buddy_alloc_pages(2);  // 16KB
+    if (!idle_kstack) KPANIC("sched: failed to allocate idle kernel stack");
+    t->kernel_stack  = reinterpret_cast<uint64_t>(idle_kstack);
 
     return t;
 }

@@ -190,9 +190,25 @@ Process* elf_load(const void* elf_data, size_t elf_size,
     }
     stack_vmo->Release();
 
-    // Pre-commit the top page of the stack so the thread can push
-    // before any page fault fires
     stack_vmo->GetPage(USER_STACK_SIZE - PAGE_SIZE, true);
+
+    // ── Pre-install PTEs for all loaded pages ──────────────────────
+    // Walk all VmRegions and install PTEs for committed VMO pages.
+    // This avoids #PF handlers with deep call chains during ring-3
+    // execution, which would corrupt the IRET frame on the IST stack.
+    for (VmRegion* vr = proc->regions; vr; vr = vr->next) {
+        for (uint64_t off = 0; off < vr->size; off += PAGE_SIZE) {
+            uint64_t va = vr->base_va + off;
+            uint64_t vmo_off = vr->vmo_offset + off;
+            uint64_t phys = vr->vmo->GetPage(vmo_off, false);
+            if (phys) {
+                uint64_t pte_flags = PageFlags::Present | PageFlags::User;
+                if (vr->flags & VM_WRITE) pte_flags |= PageFlags::Writable;
+                if (!(vr->flags & VM_EXEC)) pte_flags |= PageFlags::NoExec;
+                page_table_map(proc->pml4_phys, va, phys, pte_flags);
+            }
+        }
+    }
 
     // ── Create main thread ─────────────────────────────────────────
     // The thread runs elf_trampoline() in kernel mode, which reads r15/r14

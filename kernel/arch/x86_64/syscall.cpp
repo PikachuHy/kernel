@@ -264,7 +264,11 @@ void syscall_init() {
     uint64_t efer = x86::rdmsr(IA32_EFER);
     x86::wrmsr(IA32_EFER, efer | 1);  // SCE bit
 
-    x86::wrmsr(IA32_STAR, (0x1BULL << 48) | (0x08ULL << 32));
+    // SYSRET computes CS = (STAR[63:48] + 16) | 3.
+    // For user code CS=0x1B (GDT index 3, RPL 3):
+    //   (STAR[63:48] + 16) | 3 = 0x1B → STAR[63:48] = 0x18 - 16 = 0x08
+    // SYSCALL loads CS = STAR[47:32] = 0x08 (kernel code, ring 0).
+    x86::wrmsr(IA32_STAR, (0x08ULL << 48) | (0x08ULL << 32));
 
     x86::wrmsr(IA32_LSTAR, reinterpret_cast<uint64_t>(&syscall_entry));
     x86::wrmsr(IA32_CSTAR, 0);

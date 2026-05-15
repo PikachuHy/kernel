@@ -47,7 +47,12 @@ static void print_hex(uint64_t n) {
 }
 
 extern "C" void _start() {
-    print("=== init: user-space bootstrap ===\n");
+    // Read CS to verify correct ring-3 selector (should be 0x1B)
+    uint64_t cs_val;
+    asm volatile("mov %%cs, %0" : "=r"(cs_val));
+    print("=== init: CS=");
+    print_hex(cs_val);
+    print(" ===\n");
 
     // Test: basic syscalls
     print("  SYS_DEBUG_PRINT: OK\n");

@@ -83,12 +83,16 @@ extern "C" void exception_handler(InterruptFrame* frame) {
             bool was_write = (frame->err_code & 0x2) != 0;
             bool handled = cur->process->HandlePageFault(cr2, was_write);
             if (handled) {
-                // Ensure CS in IRET frame is user code (0x1B).
-                // HandlePageFault's deep stack usage may corrupt the CS
-                // slot. Force it back. The compiler barrier prevents dead
-                // store elimination (iretq reads this, not visible to C).
-                frame->cs = 0x1B;
-                asm volatile("" ::: "memory");
+                // IST isolates the #PF stack, but HandlePageFault's deep
+                // call chain still overwrites the IRET frame on the IST
+                // stack. Restore CS (offset 18 from frame base) and SS
+                // (offset 22) to valid ring-3 selectors.
+                // frame is the address of saved r15; IRET frame starts at
+                // frame + 136 (15*8 regs + 8 int_no + 8 err_code).
+                // CS is at frame+144, SS is at frame+168 (if ring-3).
+                uint64_t* raw = reinterpret_cast<uint64_t*>(frame);
+                *(volatile uint64_t*)(raw + 18) = 0x1B;  // CS slot
+                *(volatile uint64_t*)(raw + 21) = 0x23;  // SS slot
                 return;
             }
         }
@@ -251,13 +255,13 @@ void idt_init() {
     idt_set_gate(5, (uint64_t)&isr_exc5, 0, 0x8E);
     idt_set_gate(6, (uint64_t)&isr_exc6, 0, 0x8E);
     idt_set_gate(7, (uint64_t)&isr_exc7, 0, 0x8E);
-    idt_set_gate(8, (uint64_t)&isr_exc8, 0, 0x8E);
+    idt_set_gate(8, (uint64_t)&isr_exc8, 2, 0x8E);   // IST2 for #DF
     idt_set_gate(9, (uint64_t)&isr_exc9, 0, 0x8E);
     idt_set_gate(10, (uint64_t)&isr_exc10, 0, 0x8E);
     idt_set_gate(11, (uint64_t)&isr_exc11, 0, 0x8E);
     idt_set_gate(12, (uint64_t)&isr_exc12, 0, 0x8E);
     idt_set_gate(13, (uint64_t)&isr_exc13, 0, 0x8E);
-    idt_set_gate(14, (uint64_t)&isr_exc14, 0, 0x8E);
+    idt_set_gate(14, (uint64_t)&isr_exc14, 1, 0x8E);   // IST1 for #PF
     idt_set_gate(15, (uint64_t)&isr_exc15, 0, 0x8E);
     idt_set_gate(16, (uint64_t)&isr_exc16, 0, 0x8E);
     idt_set_gate(17, (uint64_t)&isr_exc17, 0, 0x8E);
