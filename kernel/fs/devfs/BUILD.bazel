@@ -1,0 +1,35 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+genrule(
+    name = "devfs_elf",
+    srcs = ["devfs.cpp", "devfs.ld"],
+    outs = ["devfs.elf"],
+    cmd = "/usr/bin/clang++ " +
+          "-target x86_64-unknown-elf " +
+          "-ffreestanding -nostdlib " +
+          "-std=c++26 " +
+          "-fno-exceptions -fno-rtti " +
+          "-Wall -Wextra -Werror " +
+          "-O2 " +
+          "-mno-sse -mno-sse2 -mgeneral-regs-only " +
+          "-mcmodel=small " +
+          "-T $(location devfs.ld) " +
+          "-o $@ " +
+          "$(location devfs.cpp) " +
+          "-Wl,-z,max-page-size=0x1000 " +
+          "-static " +
+          "--ld-path=/usr/local/bin/lld-wrapper.sh",
+    visibility = ["//visibility:private"],
+)
+
+genrule(
+    name = "devfs_embed",
+    srcs = [":devfs.elf"],
+    outs = ["devfs_embed.o"],
+    cmd = "cp $(SRCS) $(@D)/devfs.bin && " +
+          "cd $(@D) && " +
+          "/usr/local/opt/llvm/bin/llvm-objcopy " +
+          "-I binary -O elf64-x86-64 -B i386:x86-64 " +
+          "devfs.bin $$PWD/devfs_embed.o",
+    visibility = ["//visibility:public"],
+)
