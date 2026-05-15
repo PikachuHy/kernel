@@ -39,6 +39,7 @@ cc_test(
         "//kernel/core/object:handle_table.cpp",
     ],
     deps = [
+        "//kernel/core/mm:mm",
         "//kernel/core/mm:slab_hdrs",
         "//kernel/core/object:object_hdrs",
         "//kernel/lib:klib",
@@ -54,6 +55,7 @@ cc_test(
         "process_test.cpp",
         "//kernel/core/object:process.cpp",
         "//kernel/core/object:object.cpp",
+        "//kernel/core/object:handle_table.cpp",
     ],
     deps = [
         "//kernel/arch/x86_64:paging_hdrs",
