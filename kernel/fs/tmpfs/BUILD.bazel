@@ -1,0 +1,35 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+genrule(
+    name = "tmpfs_elf",
+    srcs = ["tmpfs.cpp", "tmpfs.ld"],
+    outs = ["tmpfs.elf"],
+    cmd = "/usr/bin/clang++ " +
+          "-target x86_64-unknown-elf " +
+          "-ffreestanding -nostdlib " +
+          "-std=c++26 " +
+          "-fno-exceptions -fno-rtti " +
+          "-Wall -Wextra -Werror " +
+          "-O2 " +
+          "-mno-sse -mno-sse2 -mgeneral-regs-only " +
+          "-mcmodel=small " +
+          "-T $(location tmpfs.ld) " +
+          "-o $@ " +
+          "$(location tmpfs.cpp) " +
+          "-Wl,-z,max-page-size=0x1000 " +
+          "-static " +
+          "--ld-path=/usr/local/bin/lld-wrapper.sh",
+    visibility = ["//visibility:private"],
+)
+
+genrule(
+    name = "tmpfs_embed",
+    srcs = [":tmpfs.elf"],
+    outs = ["tmpfs_embed.o"],
+    cmd = "cp $(SRCS) $(@D)/tmpfs.bin && " +
+          "cd $(@D) && " +
+          "/usr/local/opt/llvm/bin/llvm-objcopy " +
+          "-I binary -O elf64-x86-64 -B i386:x86-64 " +
+          "tmpfs.bin $$PWD/tmpfs_embed.o",
+    visibility = ["//visibility:public"],
+)
