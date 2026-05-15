@@ -27,3 +27,7 @@ constexpr uint64_t SYSCALL_PROCESS_EXIT    = 31;
 // VMO
 constexpr uint64_t SYSCALL_VMO_CREATE      = 40;
 constexpr uint64_t SYSCALL_VMO_MAP         = 41;
+
+// VFS
+constexpr uint64_t SYSCALL_OPEN            = 50;
+constexpr uint64_t SYSCALL_MOUNT           = 51;

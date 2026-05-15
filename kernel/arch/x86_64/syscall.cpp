@@ -9,6 +9,8 @@
 #include "kernel/core/sched/sched.hpp"     // current_thread()
 #include "kernel/core/object/process.hpp"  // Process
 #include "kernel/core/mm/vmo.hpp"          // Vmo
+#include "kernel/fs/protocol.hpp"          // FileResponse
+#include "kernel/fs/mount.hpp"             // MountEntry, mount_resolve, mount_add
 
 // Placement new for constructing objects in pre-allocated memory
 inline void* operator new(size_t, void* p) noexcept { return p; }
@@ -270,6 +272,109 @@ uint64_t sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
     return ok ? 0 : -1;
 }
 
+// ── VFS syscalls ──────────────────────────────────────────────────
+
+uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
+    const char* path = reinterpret_cast<const char*>(a1);
+    uint64_t flags = a2;
+
+    MountEntry* mount = mount_resolve(path);
+    if (!mount) return INVALID_HANDLE;
+
+    // Compute the relative path after the mount prefix
+    // Skip past the mount prefix in the full path
+    const char* prefix = mount->path;
+    while (*prefix) { path++; prefix++; }
+    if (*path == '/') path++;
+
+    // Create the file Channel
+    Channel* file_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+    if (!file_chan) return INVALID_HANDLE;
+    new (file_chan) Channel();
+
+    // Allocate a handle for the file Channel in the FS server's handle table.
+    // The FS server will use this handle to communicate on the file Channel.
+    Process* fs_proc = mount->fs_process;
+    Rights full_rights{.mask = Rights::Read | Rights::Write |
+                               Rights::Duplicate | Rights::Transfer};
+    handle_t fs_file_handle = fs_proc->handles.Alloc(file_chan, full_rights);
+
+    // Build the Open message payload
+    struct OpenPayload {
+        uint32_t flags;
+        char     path[256];
+        uint32_t file_handle;
+    };
+    OpenPayload payload;
+    payload.flags = static_cast<uint32_t>(flags);
+    // Copy relative path into payload
+    {
+        int i = 0;
+        while (path[i] && i < 255) { payload.path[i] = path[i]; i++; }
+        payload.path[i] = '\0';
+    }
+    payload.file_handle = fs_file_handle;
+
+    // Send Open request to FS server via the mount Channel
+    int rc = mount->fs_channel->Write(&payload, sizeof(payload), nullptr, 0);
+    if (rc != 0) {
+        fs_proc->handles.Free(fs_file_handle);
+        file_chan->Release();
+        return INVALID_HANDLE;
+    }
+
+    // Wait for the FS server's response
+    FileResponse resp;
+    size_t out_len;
+    while (true) {
+        rc = mount->fs_channel->Read(&resp, sizeof(resp), &out_len,
+                                      nullptr, 0, nullptr);
+        if (rc != -2) break;
+        thread_yield();
+    }
+
+    if (rc != 0 || resp.result != 0) {
+        fs_proc->handles.Free(fs_file_handle);
+        file_chan->Release();
+        return INVALID_HANDLE;
+    }
+
+    // Allocate a handle for the calling process
+    Process* cur = current_process();
+    if (!cur) {
+        fs_proc->handles.Free(fs_file_handle);
+        file_chan->Release();
+        return INVALID_HANDLE;
+    }
+
+    handle_t client_handle = cur->handles.Alloc(file_chan, full_rights);
+
+    // Release the temporary reference from construction.
+    // The two handles (fs server + client) each hold a reference.
+    file_chan->Release();
+
+    return client_handle;
+}
+
+uint64_t sys_mount(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
+    const char* path = reinterpret_cast<const char*>(a1);
+    handle_t h = static_cast<handle_t>(a2);
+
+    Process* cur = current_process();
+    if (!cur) return static_cast<uint64_t>(-1);
+
+    KernelObject* obj = cur->handles.Lookup(h);
+    if (!obj || obj->type() != KernelObject::Type::Channel)
+        return static_cast<uint64_t>(-1);
+
+    Channel* ch = static_cast<Channel*>(obj);
+
+    // The FS server process is the current thread's process
+    Process* fs_proc = current_thread()->process;
+
+    return static_cast<uint64_t>(mount_add(path, ch, fs_proc));
+}
+
 // ── Dispatch table ───────────────────────────────────────────────
 
 using syscall_fn_t = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t);
@@ -293,6 +398,8 @@ void init_syscall_table() {
     g_syscall_table[SYSCALL_PROCESS_EXIT]   = sys_process_exit;
     g_syscall_table[SYSCALL_VMO_CREATE]     = sys_vmo_create;
     g_syscall_table[SYSCALL_VMO_MAP]        = sys_vmo_map;
+    g_syscall_table[SYSCALL_OPEN]           = sys_open;
+    g_syscall_table[SYSCALL_MOUNT]          = sys_mount;
 }
 
 extern "C" uint64_t syscall_dispatcher(uint64_t num, uint64_t a1, uint64_t a2,
