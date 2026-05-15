@@ -308,6 +308,18 @@ extern "C" void kernel_entry(void) {
     // Hook timer to scheduler for preemption (every 10ms)
     timer_periodic(10000, timer_preempt_callback);
 
+    // ── Phase 7: VMM + Process + ring-3 ──────────────────────────
+    klog("\n=== Phase 7: VMM + Process + ring-3 ===\n\n");
+    klog("  VMM:     per-process PML4, VmRegion list, demand paging\n");
+    klog("  VMO:     Anonymous (COW) + Physical, buddy-backed pages\n");
+    klog("  Process: HandleTable (1024 entries, buddy-allocated)\n");
+    klog("  Stack:   16KB per-thread kernel stack, TSS RSP0 on switch\n");
+    klog("  IST:     #PF(IST1) #DF(IST2) 16KB each\n");
+    klog("  GDT:     user CS=0x1B, SS=0x13 (sysretq-compatible)\n");
+    klog("  Timer:   10ms preemption, SYSRET CS fix\n");
+    klog("  ELF:     init.elf @ 0x400000, embedded via llvm-objcopy\n");
+    klog("  Init:    ring-3 syscalls (print, channel, close, exit)\n\n");
+
     // ── Embedded init process ──────────────────────────────────────
     // elf_load_init_process() loads the embedded init.elf and starts it.
     // It is defined in kernel/core/elf_loader.cpp (extern "C").
