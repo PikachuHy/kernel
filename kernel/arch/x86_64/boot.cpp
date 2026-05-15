@@ -85,6 +85,7 @@ static volatile bool bsp_done __attribute__((unused)) = false;
 extern uint8_t _end;
 
 // Timer preemption callback — drives scheduler_tick() from LAPIC timer.
+__attribute__((unused))
 static bool timer_preempt_callback(uint64_t) {
     scheduler_tick();
     return true;
@@ -305,7 +306,9 @@ extern "C" void kernel_entry(void) {
     scheduler_init(hhdm);
 
     // Hook timer to scheduler for preemption (every 10ms)
-    // FIXME: timer disabled — iretq #GP(0x28) on ring-3 preemption
+    // FIXME: timer disabled — #PF handler stack operations corrupt
+    // CS slot in IRET frame (0x1B→0x2B), causing #GP on iretq.
+    // Frame save/restore + barrier fix applied but deeper issue remains.
     //timer_periodic(10000, timer_preempt_callback);
 
     // ── Embedded init process ──────────────────────────────────────

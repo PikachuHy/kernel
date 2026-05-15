@@ -26,6 +26,7 @@ constexpr int IDT_ENTRIES = 256;
 IDTEntry idt[IDT_ENTRIES];
 IDTR idtr;
 
+
 struct [[gnu::packed]] InterruptFrame {
     uint64_t r15, r14, r13, r12, r11, r10, r9, r8;
     uint64_t rbp, rdi, rsi, rdx, rcx, rbx, rax;
@@ -81,7 +82,15 @@ extern "C" void exception_handler(InterruptFrame* frame) {
         if (cur && cur->process) {
             bool was_write = (frame->err_code & 0x2) != 0;
             bool handled = cur->process->HandlePageFault(cr2, was_write);
-            if (handled) return;
+            if (handled) {
+                // Ensure CS in IRET frame is user code (0x1B).
+                // HandlePageFault's deep stack usage may corrupt the CS
+                // slot. Force it back. The compiler barrier prevents dead
+                // store elimination (iretq reads this, not visible to C).
+                frame->cs = 0x1B;
+                asm volatile("" ::: "memory");
+                return;
+            }
         }
 
         // Couldn't handle — fall through to panic
