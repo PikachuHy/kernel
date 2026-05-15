@@ -306,8 +306,6 @@ extern "C" void kernel_entry(void) {
     scheduler_init(hhdm);
 
     // Hook timer to scheduler for preemption (every 10ms)
-    // FIXME: idle thread iretq #GP(0x10) after init exits — idle stack
-    // is overwritten by timer ISR pushes. Needs larger stack or IST.
     timer_periodic(10000, timer_preempt_callback);
 
     // ── Embedded init process ──────────────────────────────────────
