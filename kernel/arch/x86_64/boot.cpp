@@ -278,6 +278,13 @@ extern "C" void kernel_entry(void) {
     klog("Initializing syscall...\n");
     syscall_init();
 
+    // ── Phase 6: Object Manager + IPC ──
+    klog("\n=== Phase 6: Object Manager + IPC ===\n\n");
+    klog("  KernelObject:  ref-counted base, Type enum (Channel, Port, Process, Vmo)\n");
+    klog("  HandleTable:   1024 entries, spinlock, free-list alloc\n");
+    klog("  Channel:       bidirectional, FIFO, data + handle transfer\n");
+    klog("  Port:          many-to-one, named service discovery\n");
+    klog("  Syscall:       LSTAR, syscall_entry, dispatcher (10 handlers)\n\n");
 
     // ── Phase 4: SMP bringup ──
     klog("=== Phase 4: SMP Bringup ===\n\n");
