@@ -2,6 +2,7 @@
 // User-space init process — first ring-3 program
 
 using uint64_t = unsigned long long;
+using int64_t  = signed long long;
 using uint32_t = unsigned int;
 using uint8_t  = unsigned char;
 using size_t = decltype(sizeof(0));
@@ -9,8 +10,9 @@ using size_t = decltype(sizeof(0));
 // Syscall numbers (must match kernel/arch/x86_64/syscall.hpp)
 constexpr int SYS_DEBUG_PRINT    = 0;
 constexpr int SYS_HANDLE_CLOSE   = 1;
-constexpr int SYS_CHANNEL_CREATE = 10;
+constexpr int SYS_CHANNEL_WRITE  = 11;
 constexpr int SYS_PROCESS_EXIT   = 31;
+constexpr int SYS_OPEN           = 50;
 
 // syscall6(num, a1, a2, a3, a4, a5) → return value in rax
 static inline uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
@@ -47,31 +49,45 @@ static void print_hex(uint64_t n) {
 }
 
 extern "C" void _start() {
-    // Read CS to verify correct ring-3 selector (should be 0x1B)
-    uint64_t cs_val;
-    asm volatile("mov %%cs, %0" : "=r"(cs_val));
-    print("=== init: CS=");
-    print_hex(cs_val);
-    print(" ===\n");
+    print("=== init: VFS test ===\n");
 
-    // Test: basic syscalls
-    print("  SYS_DEBUG_PRINT: OK\n");
+    // Test 1: Open /dev/console and write a greeting
+    {
+        uint64_t h = syscall6(SYS_OPEN,
+            (uint64_t)"/dev/console", 0x2, 0, 0, 0);  // O_WRONLY
+        print("  sys_open(/dev/console): ");
+        print_hex(h);
+        print("\n");
 
-    // Channel create
-    uint64_t pair = syscall6(SYS_CHANNEL_CREATE, 0, 0, 0, 0, 0);
-    print("  SYS_CHANNEL_CREATE: ");
-    print_hex(pair);
-    print("\n");
+        if ((int64_t)h >= 0) {
+            const char* msg = "Hello from init via VFS!\n";
+            struct WA { const void* d; size_t sz; const uint32_t* hnd; size_t n; };
+            WA wa = { msg, 24, nullptr, 0 };
+            syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&wa, 0, 0, 0);
+            print("  write: OK\n");
+            syscall6(SYS_HANDLE_CLOSE, h, 0, 0, 0, 0);
+        }
+    }
 
-    // Handle close (close both ends)
-    uint32_t ch_a = static_cast<uint32_t>(pair >> 32);
-    uint32_t ch_b = static_cast<uint32_t>(pair & 0xFFFFFFFF);
-    syscall6(SYS_HANDLE_CLOSE, ch_a, 0, 0, 0, 0);
-    syscall6(SYS_HANDLE_CLOSE, ch_b, 0, 0, 0, 0);
-    print("  SYS_HANDLE_CLOSE: OK\n");
+    // Test 2: Create a file in tmpfs
+    {
+        uint64_t h = syscall6(SYS_OPEN,
+            (uint64_t)"/hello.txt", 0x8, 0, 0, 0);  // O_CREAT
+        print("  sys_open(/hello.txt, O_CREAT): ");
+        print_hex(h);
+        print("\n");
+
+        if ((int64_t)h >= 0) {
+            const char* data = "Hello tmpfs!";
+            struct WA { const void* d; size_t sz; const uint32_t* hnd; size_t n; };
+            WA wa = { data, 11, nullptr, 0 };
+            syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&wa, 0, 0, 0);
+            print("  write: OK\n");
+            syscall6(SYS_HANDLE_CLOSE, h, 0, 0, 0, 0);
+        }
+    }
 
     print("=== init: done ===\n");
     syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);
-
     while (1) { asm volatile("hlt"); }
 }

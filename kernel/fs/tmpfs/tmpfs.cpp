@@ -218,7 +218,7 @@ static void handle_file(FileState* fs) {
 // ── Entry point ──────────────────────────────────────────────────
 extern "C" void _start() {
     debug("tmpfs: starting\n");
-    const uint32_t MOUNT_CHAN = 0;
+    const uint32_t MOUNT_CHAN = 1;  // handle 0 = INVALID_HANDLE, first Alloc returns 1
 
     while (true) {
         OpenPayload payload;
