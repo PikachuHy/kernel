@@ -7,6 +7,8 @@ cc_binary(
         "core/elf_loader.cpp",
         "core/elf_trampoline.S",
         "//kernel/init:init_embed",
+        "//kernel/fs/devfs:devfs_embed",
+        "//kernel/fs/tmpfs:tmpfs_embed",
     ],
     deps = [
         "//kernel/arch/x86_64:arch",

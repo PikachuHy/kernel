@@ -17,3 +17,8 @@ Process* elf_load(const void* elf_data, size_t elf_size,
 // Load and start the embedded init process.
 // Defined in elf_loader.cpp, references the init_embed object symbols.
 extern "C" void elf_load_init_process();
+
+// Load and start the embedded devfs + tmpfs filesystem servers.
+// Creates mount Channels, allocates handle 0 in each server process,
+// registers mounts via mount_add(), and starts the server threads.
+extern "C" void elf_load_fs_servers();

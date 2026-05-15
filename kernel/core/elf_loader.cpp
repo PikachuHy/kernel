@@ -1,11 +1,17 @@
 #include "kernel/core/elf_loader.hpp"
 #include "kernel/core/object/process.hpp"
+#include "kernel/core/object/channel.hpp"
 #include "kernel/core/mm/vmo.hpp"
 #include "kernel/core/mm/vmm.hpp"
+#include "kernel/core/mm/slab.hpp"
 #include "kernel/core/sched/sched.hpp"
 #include "kernel/arch/x86_64/paging.hpp"
 #include "kernel/arch/x86_64/usermode.hpp"
 #include "kernel/lib/klog.hpp"
+#include "kernel/fs/mount.hpp"
+
+// Placement new (freestanding -- no <new> header provided by our cross toolchain)
+inline void* operator new(size_t, void* p) noexcept { return p; }
 
 // ── ELF64 header structures ───────────────────────────────────────
 
@@ -252,5 +258,77 @@ extern "C" void elf_load_init_process() {
         thread_start(init_thread);
     } else {
         klog("  FAILED to load init process\n");
+    }
+}
+
+// ── FS server embedding symbols ──────────────────────────────────
+extern "C" uint8_t _binary_devfs_bin_start[];
+extern "C" uint8_t _binary_devfs_bin_end[];
+extern "C" uint8_t _binary_tmpfs_bin_start[];
+extern "C" uint8_t _binary_tmpfs_bin_end[];
+
+extern "C" void elf_load_fs_servers() {
+    // ── devfs ─────────────────────────────────────────────────
+    {
+        uint64_t size = _binary_devfs_bin_end - _binary_devfs_bin_start;
+        klog("Loading devfs server ("); klog_hex(size); klog(" bytes)...\n");
+
+        Thread* thr = nullptr;
+        Process* proc = elf_load(_binary_devfs_bin_start, size, "devfs", 1, &thr);
+        if (!proc || !thr) {
+            klog("  FAILED to load devfs\n");
+            return;
+        }
+
+        // Create mount Channel pair for devfs.
+        // The Channel is bidirectional — kernel writes Open requests,
+        // FS server reads them on handle 0 and writes responses back.
+        Channel* mount_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+        if (!mount_chan) {
+            klog("  FAILED to create devfs mount Channel\n");
+            return;
+        }
+        new (mount_chan) Channel();
+
+        // Allocate handle 0 in the devfs process for this Channel
+        Rights full{.mask = Rights::Read | Rights::Write |
+                           Rights::Duplicate | Rights::Transfer};
+        proc->handles.Alloc(mount_chan, full);
+
+        // Register the mount (kernel keeps its reference via mount table)
+        mount_add("/dev", mount_chan, proc);
+
+        // Start the devfs server thread
+        thread_start(thr);
+        klog("  devfs server started, mounted at /dev\n");
+    }
+
+    // ── tmpfs ─────────────────────────────────────────────────
+    {
+        uint64_t size = _binary_tmpfs_bin_end - _binary_tmpfs_bin_start;
+        klog("Loading tmpfs server ("); klog_hex(size); klog(" bytes)...\n");
+
+        Thread* thr = nullptr;
+        Process* proc = elf_load(_binary_tmpfs_bin_start, size, "tmpfs", 1, &thr);
+        if (!proc || !thr) {
+            klog("  FAILED to load tmpfs\n");
+            return;
+        }
+
+        Channel* mount_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+        if (!mount_chan) {
+            klog("  FAILED to create tmpfs mount Channel\n");
+            return;
+        }
+        new (mount_chan) Channel();
+
+        Rights full{.mask = Rights::Read | Rights::Write |
+                           Rights::Duplicate | Rights::Transfer};
+        proc->handles.Alloc(mount_chan, full);
+
+        mount_add("/", mount_chan, proc);
+
+        thread_start(thr);
+        klog("  tmpfs server started, mounted at /\n");
     }
 }

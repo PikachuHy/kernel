@@ -23,6 +23,7 @@
 #include "kernel/core/object/channel.hpp"
 #include "kernel/core/object/port.hpp"
 #include "kernel/core/object/process.hpp"
+#include "kernel/fs/mount.hpp"
 
 // Placement new (defined in kernel/core/object/port.cpp — re-declared here for boot.cpp's usage)
 void* operator new(size_t, void* p) noexcept;
@@ -311,6 +312,19 @@ extern "C" void kernel_entry(void) {
 
     klog("Initializing scheduler...\n");
     scheduler_init(hhdm);
+
+    // ── Phase 8: VFS ──
+    klog("\n=== Phase 8: VFS ===\n\n");
+    klog("  VFS:     IPC-native — files are Channels\n");
+    klog("  Servers: devfs (/dev) + tmpfs (/)\n");
+    klog("  Syscall: open (50) + mount (51), read/write via channel\n\n");
+
+    klog("Initializing mount namespace...\n");
+    mount_init();
+
+    klog("Loading filesystem servers...\n");
+    extern void elf_load_fs_servers();
+    elf_load_fs_servers();
 
     // Hook timer to scheduler for preemption (every 10ms)
     timer_periodic(10000, timer_preempt_callback);
