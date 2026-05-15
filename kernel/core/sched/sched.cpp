@@ -36,7 +36,11 @@ static Process* s_kernel_process = nullptr;
 
 static void idle_entry(void) {
     while (true) {
-        asm volatile("sti; hlt; cli");
+        // HLT wakes on any pending interrupt (even masked). We don't
+        // enable IF, so the interrupt is held pending until the next
+        // thread runs with IF=1. This avoids iretq issues caused by
+        // interrupt frames overwriting the idle thread's tiny stack.
+        asm volatile("hlt");
     }
 }
 
@@ -96,7 +100,7 @@ static Thread* create_idle_thread(uint32_t cpu_id) {
         reinterpret_cast<uint64_t>(idle_entry);
     *reinterpret_cast<uint64_t*>(frame_base_virt + 64) =
         reinterpret_cast<uint64_t>(thread_exit);
-    *reinterpret_cast<uint64_t*>(frame_base_virt + 48) = 0x202ULL;
+    *reinterpret_cast<uint64_t*>(frame_base_virt + 48) = 0x002ULL;  // IF=0
     t->rflags        = 0x202;
     t->state         = ThreadState::Running;
     t->priority      = 7;          // lowest priority
@@ -248,17 +252,12 @@ void scheduler_schedule() {
         next = s_idle_threads[0];
     }
 
-    // Convert rsp from physical to virtual if needed (idle threads
-    // are created with physical rsp, normal threads get converted
-    // in thread_start, but double-check here for safety).
+    // Convert rsp from physical to virtual if needed.
     if (next->rsp < g_hhdm) {
         next->rsp += g_hhdm;
     }
 
-    // If we would switch to the same thread, skip the context switch
-    if (next == prev) {
-        return;
-    }
+    if (next == prev) return;
 
     // Mark next as Running
     next->state = ThreadState::Running;

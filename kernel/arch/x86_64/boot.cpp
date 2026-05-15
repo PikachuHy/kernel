@@ -79,13 +79,13 @@ static volatile void* limine_requests[] = {
 
 // BSP handshake: set true after BSP finishes init. APs spin until this is set,
 // then divert to the AP entry path instead of re-running BSP init.
-static volatile bool bsp_done __attribute__((unused)) = false;
+__attribute__((unused)) static volatile bool bsp_done = false;
 
 // Linker symbol: end of BSS
 extern uint8_t _end;
 
 // Timer preemption callback — drives scheduler_tick() from LAPIC timer.
-__attribute__((unused))
+
 static bool timer_preempt_callback(uint64_t) {
     scheduler_tick();
     return true;
@@ -308,7 +308,7 @@ extern "C" void kernel_entry(void) {
     // Hook timer to scheduler for preemption (every 10ms)
     // FIXME: idle thread iretq #GP(0x10) after init exits — idle stack
     // is overwritten by timer ISR pushes. Needs larger stack or IST.
-    //timer_periodic(10000, timer_preempt_callback);
+    timer_periodic(10000, timer_preempt_callback);
 
     // ── Embedded init process ──────────────────────────────────────
     // elf_load_init_process() loads the embedded init.elf and starts it.
