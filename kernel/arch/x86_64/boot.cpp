@@ -90,9 +90,9 @@ extern uint8_t _end;
 static bool timer_preempt_callback(uint64_t uptime_ms) {
     scheduler_tick();
 
-    if (uptime_ms > 10000) {
-        // QEMU isa-debug-exit: write (code<<1)|1 to port 0xF4.
-        // QEMU exits with the given exit code (0 = success).
+    // After ~10 seconds (1000 ticks at 10ms/tick), auto-exit QEMU.
+    if (uptime_ms > 1000) {
+        klog("\n=== 10s timeout, exiting QEMU ===\n");
         x86::outb(0xF4, 1);  // (0 << 1) | 1 = exit code 0
         return false;
     }
