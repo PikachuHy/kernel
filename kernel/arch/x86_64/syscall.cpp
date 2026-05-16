@@ -301,9 +301,9 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
 
     // Build the Open message payload
     struct OpenPayload {
-        uint32_t flags;
         char     path[256];
         uint32_t file_handle;
+        uint32_t flags;
     };
     OpenPayload payload;
     payload.flags = static_cast<uint32_t>(flags);
