@@ -134,6 +134,7 @@ extern "C" void _start(){
 
     // summary
     pr("\n=== "); ph(pass); pr(" passed, "); ph(fail); pr(" failed ===\n");
+    if (fail == 0 && pass == 7) pr("*** ALL TESTS PASSED ***\n");
     pr("=== init: done ===\n");
     s6(SYS_PROCESS_EXIT,0,0,0,0,0);
     while(1) asm volatile("hlt");

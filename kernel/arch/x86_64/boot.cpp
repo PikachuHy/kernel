@@ -85,20 +85,9 @@ __attribute__((unused)) static volatile bool bsp_done = false;
 // Linker symbol: end of BSS
 extern uint8_t _end;
 
-// Timer preemption callback — drives scheduler_tick() and auto-exits after 10s.
-static bool timer_preempt_callback(uint64_t uptime_ms) {
+// Timer preemption callback — drives scheduler_tick() from LAPIC timer.
+static bool timer_preempt_callback(uint64_t) {
     scheduler_tick();
-
-    // Write to serial port every tick so we can see if timer fires.
-    // Use '0'-'9' for the ones digit of uptime.
-    serial_putc('0' + (char)(uptime_ms % 10));
-
-    if (uptime_ms > 1000) {
-        serial_putc('X');
-        // ACPI PM1a_CNT: SLP_TYP=5 (S5/soft-off) | SLP_EN
-        x86::outw(0x604, 0x3400);
-        return false;
-    }
     return true;
 }
 
