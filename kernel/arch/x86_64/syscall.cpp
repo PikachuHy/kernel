@@ -275,7 +275,8 @@ uint64_t sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
 // ── VFS syscalls ──────────────────────────────────────────────────
 
 uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
-    // Stack variables declared up front for predictable frame layout.
+    // Declare ALL stack variables up front so the compiler can lay
+    // out the frame before any branches or klog calls.
     const char* path;
     uint64_t flags;
     MountEntry* mount;
@@ -287,6 +288,7 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     int rc;
     Process* cur;
     handle_t client_handle;
+    // Read-loop locals
     int rc2;
     size_t out_len;
     FileResponse resp;
@@ -335,8 +337,7 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
         file_chan->Release();
         return INVALID_HANDLE;
     }
-
-    // Blocking read: wait for FS server response on the file Channel.
+    // Blocking read: wait for FS server response.
     out_len = 0;
     while (true) {
         rc2 = file_chan->Read(&resp, sizeof(resp), &out_len, nullptr, 0, nullptr);
