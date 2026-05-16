@@ -72,15 +72,17 @@ struct DirEntry {
     uint32_t vmo_handle;
     bool     is_dir;
     uint64_t size;       // file size in bytes
-    DirEntry* next;
+    DirEntry* next;       // sibling in same directory
+    DirEntry* children;   // first child (only if is_dir)
 };
 
-static DirEntry* root = nullptr;
+static DirEntry* root_dir = nullptr;
 static DirEntry pool[64];
 static int pool_idx = 0;
 
-static DirEntry* find_entry(const char* name) {
-    for (DirEntry* e = root; e; e = e->next) {
+static DirEntry* find_in_dir(DirEntry* dir, const char* name) {
+    if (!dir || !dir->is_dir) return nullptr;
+    for (DirEntry* e = dir->children; e; e = e->next) {
         int i = 0;
         while (name[i] && e->name[i] && name[i] == e->name[i]) i++;
         if (name[i] == '\0' && e->name[i] == '\0') return e;
@@ -88,17 +90,21 @@ static DirEntry* find_entry(const char* name) {
     return nullptr;
 }
 
-static DirEntry* add_entry(const char* name, uint32_t vmo_h, bool dir, uint64_t sz) {
+static DirEntry* add_to_dir(DirEntry* parent, const char* name,
+                             uint32_t vmo_h, bool is_dir, uint64_t sz) {
     if (pool_idx >= 64) return nullptr;
     DirEntry* e = &pool[pool_idx++];
     int i = 0;
     while (name[i] && i < 255) { e->name[i] = name[i]; i++; }
     e->name[i] = '\0';
     e->vmo_handle = vmo_h;
-    e->is_dir = dir;
+    e->is_dir = is_dir;
     e->size = sz;
-    e->next = root;
-    root = e;
+    e->children = nullptr;
+    if (parent && parent->is_dir) {
+        e->next = parent->children;
+        parent->children = e;
+    }
     return e;
 }
 
@@ -153,12 +159,19 @@ static void handle_file(FileState* fs) {
 
         switch (msg->op) {
         case FileMsg::Read: {
-            size_t count = 13;
+            uint64_t fsize = fs->entry ? fs->entry->size : 0;
+            uint64_t off = msg->offset;
+            size_t count = msg->length;
+            if (off >= fsize) {
+                count = 0;
+            } else if (off + count > fsize) {
+                count = fsize - off;
+            }
             uint8_t out[sizeof(FileResponse) + 4096];
             *(FileResponse*)out = {0, count};
-            const char* diag = "Hello, tmpfs!";
+            uint8_t* src = reinterpret_cast<uint8_t*>(MAP_BASE + off);
             for (size_t i = 0; i < count; i++)
-                out[sizeof(FileResponse) + i] = diag[i];
+                out[sizeof(FileResponse) + i] = src[i];
             channel_write(fs->file_chan, out, sizeof(FileResponse) + count);
             break;
         }
@@ -195,10 +208,33 @@ static void handle_file(FileState* fs) {
             channel_write(fs->file_chan, out, sizeof(out));
             break;
         }
-        case FileMsg::Readdir:
-            resp.result = -1;  // not yet implemented
-            channel_write(fs->file_chan, &resp, sizeof(resp));
+        case FileMsg::Readdir: {
+            if (!fs->is_dir || !fs->entry) {
+                resp.result = -1;
+                channel_write(fs->file_chan, &resp, sizeof(resp));
+                break;
+            }
+            uint8_t out[sizeof(FileResponse) + 4096];
+            size_t count = 0;
+            const size_t max_dirents = (4096 - sizeof(FileResponse)) / sizeof(Dirent);
+            Dirent* dirents = reinterpret_cast<Dirent*>(out + sizeof(FileResponse));
+            uint32_t skip = msg->offset;
+
+            for (DirEntry* e = fs->entry->children; e && count < max_dirents; e = e->next) {
+                if (skip > 0) { skip--; continue; }
+                dirents[count].type = e->is_dir ? 1 : 0;
+                dirents[count].size = e->size;
+                int j = 0;
+                while (e->name[j] && j < 255) { dirents[count].name[j] = e->name[j]; j++; }
+                dirents[count].name[j] = '\0';
+                count++;
+            }
+            FileResponse* rp = reinterpret_cast<FileResponse*>(out);
+            rp->result = 0;
+            rp->size = count * sizeof(Dirent);
+            channel_write(fs->file_chan, out, sizeof(FileResponse) + rp->size);
             break;
+        }
         case FileMsg::Close:
             handle_close(fs->file_chan);
             return;
@@ -214,6 +250,13 @@ static void handle_file(FileState* fs) {
 extern "C" void _start() {
     const uint32_t MOUNT_CHAN = 1;
 
+    // Initialize root directory
+    root_dir = &pool[pool_idx++];
+    root_dir->is_dir = true;
+    root_dir->name[0] = '\0';
+    root_dir->children = nullptr;
+    root_dir->next = nullptr;
+
     while (true) {
         uint8_t buf[sizeof(OpenPayload)];
         int rc = channel_read(MOUNT_CHAN, buf, sizeof(buf));
@@ -224,12 +267,40 @@ extern "C" void _start() {
         uint32_t ack_handle   = payload->ack_handle;
         const char* rel = payload->path;
 
+        // Skip leading slashes
         while (*rel == '/') rel++;
 
-        DirEntry* entry = find_entry(rel);
-        if (!entry && (payload->flags & O_CREAT)) {
-            uint32_t vmo = vmo_create(4096);
-            if (vmo) entry = add_entry(rel, vmo, false, 0);
+        // Walk from root, parsing path components
+        DirEntry* current = root_dir;
+        DirEntry* entry = nullptr;
+        char comp[256];
+        int ci;
+
+        while (*rel) {
+            ci = 0;
+            while (*rel && *rel != '/') { comp[ci++] = *rel; rel++; }
+            comp[ci] = '\0';
+            if (*rel == '/') rel++;
+            if (comp[0] == '\0') continue;
+
+            bool is_last = (*rel == '\0');
+            if (current && current->is_dir) {
+                DirEntry* child = find_in_dir(current, comp);
+                if (!child) {
+                    if ((payload->flags & O_CREAT) && is_last) {
+                        uint32_t vmo = vmo_create(4096);
+                        child = add_to_dir(current, comp, vmo, false, 0);
+                    } else if ((payload->flags & O_CREAT) && !is_last) {
+                        // Create intermediate directory
+                        child = add_to_dir(current, comp, 0, true, 0);
+                    }
+                }
+                if (!child) { entry = nullptr; break; }
+                current = child;
+                if (is_last) entry = child;
+            } else {
+                entry = nullptr; break;
+            }
         }
 
         if (!entry) {
