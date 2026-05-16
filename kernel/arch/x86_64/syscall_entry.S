@@ -51,6 +51,7 @@ syscall_entry:
     # Restore context.
     addq $40, %rsp          # skip over rax, rdi, rsi, rdx, r10 (5 × 8)
     popq %r11               # user RFLAGS → r11 (for sysretq)
+    cli                     # disable IRQs during SYSRETQ CPL transition
     popq %rcx               # user RIP → rcx (for sysretq)
     # RSP now points at user RSP slot on the kernel stack.
     # Load it: (%rsp) computes address using OLD rsp, then writes to rsp.

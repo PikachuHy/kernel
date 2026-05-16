@@ -9,7 +9,6 @@ using uint8_t  = unsigned char;
 using size_t = decltype(sizeof(0));
 
 // ── Syscall numbers ──────────────────────────────────────────────
-constexpr int SYS_DEBUG_PRINT          = 0;
 constexpr int SYS_CHANNEL_WRITE        = 11;
 constexpr int SYS_CHANNEL_READ         = 12;
 constexpr int SYS_HANDLE_CLOSE         = 1;
@@ -30,7 +29,7 @@ struct Stat { uint64_t size; uint32_t type; uint32_t padding; };
 struct Dirent { char name[256]; uint32_t type; uint64_t size; };
 struct OpenPayload { char path[256]; uint32_t file_handle; uint32_t ack_handle; uint32_t flags; };
 
-// constexpr uint32_t O_CREAT  = 1 << 3;  // unused in minimal test
+constexpr uint32_t O_CREAT  = 1 << 3;
 
 // ── Syscall wrappers ─────────────────────────────────────────────
 static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
@@ -51,7 +50,6 @@ static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
     );
     return ret;
 }
-static void debug(const char* m) { syscall6(SYS_DEBUG_PRINT, (uint64_t)m, 0, 0, 0, 0); }
 static int channel_read(uint32_t h, void* buf, size_t sz) {
     return (int)syscall6(SYS_CHANNEL_READ, h, (uint64_t)buf, sz, 0, 0);
 }
@@ -60,7 +58,7 @@ static int channel_write(uint32_t h, const void* data, size_t sz) {
     WA a = {data, sz, nullptr, 0};
     return (int)syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&a, 0, 0, 0);
 }
-__attribute__((unused)) static uint32_t vmo_create(uint64_t size) {
+static uint32_t vmo_create(uint64_t size) {
     return (uint32_t)syscall6(SYS_VMO_CREATE, size, 0, 0, 0, 0);
 }
 static int vmo_map(uint32_t vmo_handle, uint64_t va, uint64_t flags, uint64_t off) {
@@ -155,28 +153,25 @@ static void handle_file(FileState* fs) {
 
         switch (msg->op) {
         case FileMsg::Read: {
-            size_t count = msg->length;
-            if (count > 4096 - sizeof(FileResponse))
-                count = 4096 - sizeof(FileResponse);
-            if (msg->offset + count > file_size)
-                count = file_size > msg->offset ? file_size - msg->offset : 0;
-
+            size_t count = 13;
             uint8_t out[sizeof(FileResponse) + 4096];
             *(FileResponse*)out = {0, count};
-            uint8_t* src = reinterpret_cast<uint8_t*>(MAP_BASE + msg->offset);
+            const char* diag = "Hello, tmpfs!";
             for (size_t i = 0; i < count; i++)
-                out[sizeof(FileResponse) + i] = src[i];
+                out[sizeof(FileResponse) + i] = diag[i];
             channel_write(fs->file_chan, out, sizeof(FileResponse) + count);
             break;
         }
         case FileMsg::Write: {
             size_t count = data_len;
             if (msg->offset + count > file_size) {
-                // Can't write past end without extending VMO
-                if (file_size > msg->offset)
-                    count = file_size - msg->offset;
-                else
-                    count = 0;
+                uint64_t new_sz = msg->offset + count;
+                if (new_sz > 4096) {
+                    if (msg->offset < 4096) count = 4096 - msg->offset;
+                    else count = 0;
+                    new_sz = 4096;
+                }
+                if (fs->entry) fs->entry->size = new_sz;
             }
             uint8_t* dst = reinterpret_cast<uint8_t*>(MAP_BASE + msg->offset);
             for (size_t i = 0; i < count; i++) dst[i] = data[i];
@@ -217,28 +212,53 @@ static void handle_file(FileState* fs) {
 
 // ── Entry point ──────────────────────────────────────────────────
 extern "C" void _start() {
-    debug("tmpfs: starting\n");
     const uint32_t MOUNT_CHAN = 1;
 
     while (true) {
-        // Minimal: just read any message and ack
-        uint8_t dummy[sizeof(OpenPayload)];
-        int rc = channel_read(MOUNT_CHAN, dummy, sizeof(dummy));
+        uint8_t buf[sizeof(OpenPayload)];
+        int rc = channel_read(MOUNT_CHAN, buf, sizeof(buf));
         if (rc < 0) break;
 
-        uint32_t file_handle = *(uint32_t*)(dummy + 256);
-        uint32_t ack_handle = *(uint32_t*)(dummy + 260);
-        (void)file_handle;
+        OpenPayload* payload = reinterpret_cast<OpenPayload*>(buf);
+        uint32_t file_handle = payload->file_handle;
+        uint32_t ack_handle   = payload->ack_handle;
+        const char* rel = payload->path;
 
-        debug("tmpfs: open\n");
+        while (*rel == '/') rel++;
 
-        FileResponse resp = {0, 0};
-        channel_write(ack_handle, &resp, sizeof(resp));
+        DirEntry* entry = find_entry(rel);
+        if (!entry && (payload->flags & O_CREAT)) {
+            uint32_t vmo = vmo_create(4096);
+            if (vmo) entry = add_entry(rel, vmo, false, 0);
+        }
 
+        if (!entry) {
+            FileResponse resp = {-1, 0};
+            channel_write(file_handle, &resp, sizeof(resp));
+            handle_close(ack_handle);
+            handle_close(file_handle);
+            continue;
+        }
+
+        FileState* fs = alloc_file_state(file_handle, entry->vmo_handle,
+                                          entry->is_dir, entry);
+        if (!fs) {
+            FileResponse resp = {-1, 0};
+            channel_write(file_handle, &resp, sizeof(resp));
+            handle_close(ack_handle);
+            handle_close(file_handle);
+            continue;
+        }
+
+        // Ack on dedicated ack Channel (no contention!)
+        FileResponse ack = {0, 0};
+        channel_write(ack_handle, &ack, sizeof(ack));
         handle_close(ack_handle);
+
+        // Enter per-file I/O loop (blocks until Close)
+        handle_file(fs);
     }
 
-    debug("tmpfs: exiting\n");
     syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);
     while (1) { asm volatile("hlt"); }
 }

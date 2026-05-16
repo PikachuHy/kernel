@@ -121,11 +121,53 @@ Process* elf_load(const void* elf_data, size_t elf_size,
         bool own_vmo = true;
 
         if (existing && existing->base_va == va_page) {
-            // Overlapping segment — merge data into the existing VMO.
-            vmo = existing->vmo;
-            own_vmo = false;
-            // Merge VM flags (e.g. R+X from .text + R from .rodata -> R+WX)
-            existing->flags |= vm_flags;
+            // Check if existing VMO is large enough for this segment
+            if (va_off + ph->memsz > existing->vmo->size()) {
+                // VMO too small — create larger VMO, copy old data, remap
+                Vmo* new_vmo = Vmo::CreateAnonymous(size_pg);
+                if (!new_vmo) {
+                    klog("elf_load: VMO alloc failed\n");
+                    proc->Release();
+                    return nullptr;
+                }
+                // Copy existing VMO content into new VMO page by page
+                for (uint64_t off = 0; off < existing->vmo->size(); off += PAGE_SIZE) {
+                    uint64_t old_phys = existing->vmo->GetPage(off, false);
+                    if (old_phys) {
+                        uint64_t new_phys = new_vmo->GetPage(off, true);
+                        if (!new_phys) {
+                            new_vmo->Release();
+                            proc->Release();
+                            return nullptr;
+                        }
+                        uint8_t* old_p = reinterpret_cast<uint8_t*>(
+                            DIRECT_MAP_BASE + old_phys);
+                        uint8_t* new_p = reinterpret_cast<uint8_t*>(
+                            DIRECT_MAP_BASE + new_phys);
+                        for (uint64_t b = 0; b < PAGE_SIZE; b++) new_p[b] = old_p[b];
+                    }
+                }
+                // Merge VM flags before region is freed
+                existing->flags |= vm_flags;
+                uint64_t merged_flags = existing->flags;
+                // Unmap old region (releases old VMO)
+                proc->Unmap(va_page, existing->size);
+                // Map new VMO with merged flags and full size
+                if (!proc->Map(new_vmo, va_page, 0, size_pg, merged_flags)) {
+                    new_vmo->Release();
+                    proc->Release();
+                    return nullptr;
+                }
+                new_vmo->Release(); // Map holds the ref
+                vmo = new_vmo;
+                own_vmo = false; // already mapped
+            } else {
+                // Overlapping segment — merge data into the existing VMO.
+                vmo = existing->vmo;
+                own_vmo = false;
+                // Merge VM flags (e.g. R+X from .text + R from .rodata -> R+WX)
+                existing->flags |= vm_flags;
+            }
         } else {
             vmo = Vmo::CreateAnonymous(size_pg);
             if (!vmo) {
@@ -289,6 +331,9 @@ extern "C" void elf_load_fs_servers() {
 
         Rights full{.mask = Rights::Read | Rights::Write |
                            Rights::Duplicate | Rights::Transfer};
+        // Mount channel handle: endpoint B so devfs reads messages sent by
+        // kernel (which writes as endpoint A) on queue_b_.
+        full.mask |= Rights::ChannelEndpointB;
         proc->handles.Alloc(mount_chan, full);
 
         mount_add("/dev", mount_chan, proc);
@@ -318,6 +363,9 @@ extern "C" void elf_load_fs_servers() {
 
         Rights full{.mask = Rights::Read | Rights::Write |
                            Rights::Duplicate | Rights::Transfer};
+        // Mount channel handle: endpoint B so tmpfs reads messages sent by
+        // kernel (which writes as endpoint A) on queue_b_.
+        full.mask |= Rights::ChannelEndpointB;
         proc->handles.Alloc(mount_chan, full);
 
         mount_add("/", mount_chan, proc);

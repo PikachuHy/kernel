@@ -8,6 +8,7 @@
 	    pushq %r12; pushq %r13; pushq %r14; pushq %r15
 	    movq $\n, %rdi
 	    callq irq_dispatch
+	    cli                     # IF=1 after switch_to popfq; prevent nested IRQ during cleanup
 	    popq %r15; popq %r14; popq %r13; popq %r12
 	    popq %r11; popq %r10; popq %r9; popq %r8
 	    popq %rbp; popq %rdi; popq %rsi; popq %rdx

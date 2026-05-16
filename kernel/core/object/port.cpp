@@ -28,9 +28,11 @@ int Port::Connect(Port* port, HandleTable& handles, handle_t* out_client_chan) {
     new (ch) Channel();
 
     handle_t a = handles.Alloc(ch, Rights{.mask = Rights::Read | Rights::Write |
-                                                 Rights::Duplicate | Rights::Transfer});
-    handle_t b = handles.Alloc(ch, Rights{.mask = Rights::Read | Rights::Write |
-                                                 Rights::Duplicate | Rights::Transfer});
+                                                 Rights::Duplicate | Rights::Transfer});  // endpoint A
+    Rights rb = Rights{.mask = Rights::Read | Rights::Write |
+                              Rights::Duplicate | Rights::Transfer};
+    rb.mask |= Rights::ChannelEndpointB;
+    handle_t b = handles.Alloc(ch, rb);  // endpoint B
     ch->Release(); // handles own the ref
 
     Conn* conn = static_cast<Conn*>(kmalloc(sizeof(Conn)));

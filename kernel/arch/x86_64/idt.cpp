@@ -78,21 +78,37 @@ extern "C" void exception_handler(InterruptFrame* frame) {
     if (frame->int_no == 14) {
         uint64_t cr2;
         asm volatile("mov %%cr2, %0" : "=r"(cr2));
+
+        // Save critical IRET frame fields BEFORE calling HandlePageFault,
+        // whose deep call chain on the IST stack can overwrite the frame
+        // (CS, SS, RIP, RFLAGS).  We read the raw values now and restore
+        // known-good selectors afterward.
+        // IRET frame (after 15 regs + int_no + err_code):
+        //   raw[17] = RIP, raw[18] = CS, raw[19] = RFLAGS
+        //   raw[20] = RSP (ring-3 only), raw[21] = SS (ring-3 only)
+        uint64_t* raw          = reinterpret_cast<uint64_t*>(frame);
+        uint64_t  pf_rip       = raw[17];
+        uint64_t  pf_cs        = raw[18];
+        uint64_t  pf_rflags    = raw[19];
+        bool      pf_ring3     = (pf_cs & 3) == 3;
+        uint64_t  pf_rsp       = pf_ring3 ? raw[20] : 0;
+
         Thread* cur = current_thread();
         if (cur && cur->process) {
             bool was_write = (frame->err_code & 0x2) != 0;
             bool handled = cur->process->HandlePageFault(cr2, was_write);
             if (handled) {
-                // IST isolates the #PF stack, but HandlePageFault's deep
-                // call chain still overwrites the IRET frame on the IST
-                // stack. Restore CS (offset 18 from frame base) and SS
-                // (offset 22) to valid ring-3 selectors.
-                // frame is the address of saved r15; IRET frame starts at
-                // frame + 136 (15*8 regs + 8 int_no + 8 err_code).
-                // CS is at frame+144, SS is at frame+168 (if ring-3).
-                uint64_t* raw = reinterpret_cast<uint64_t*>(frame);
-                *(volatile uint64_t*)(raw + 18) = 0x1B;  // CS slot
-                *(volatile uint64_t*)(raw + 21) = 0x23;  // SS slot
+                // IST stack may have been overwritten by the deep call chain.
+                // Restore the IRET frame using the values saved *before* the call.
+                // Re-read raw pointer in case stack grew (same address though).
+                raw = reinterpret_cast<uint64_t*>(frame);
+                raw[17] = pf_rip;
+                raw[18] = pf_ring3 ? 0x1B : 0x08;
+                raw[19] = pf_rflags;
+                if (pf_ring3) {
+                    raw[20] = pf_rsp;
+                    raw[21] = 0x13;          // SS = user data (DPL=3, entry 2)
+                }
                 return;
             }
         }

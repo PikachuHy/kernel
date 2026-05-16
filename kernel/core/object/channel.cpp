@@ -1,26 +1,27 @@
 #include "kernel/core/object/channel.hpp"
 #include "kernel/core/mm/slab.hpp"
 
-void Channel::Enqueue(Message* msg) {
+void Channel::Enqueue(Message* msg, Message** head, Message** tail) {
     msg->next = nullptr;
-    if (!head_) {
-        head_ = tail_ = msg;
+    if (!*head) {
+        *head = *tail = msg;
     } else {
-        tail_->next = msg;
-        tail_ = msg;
+        (*tail)->next = msg;
+        *tail = msg;
     }
 }
 
-Channel::Message* Channel::Dequeue() {
-    if (!head_) return nullptr;
-    Message* msg = head_;
-    head_ = head_->next;
-    if (!head_) tail_ = nullptr;
+Channel::Message* Channel::Dequeue(Message** head, Message** tail) {
+    if (!*head) return nullptr;
+    Message* msg = *head;
+    *head = (*head)->next;
+    if (!*head) *tail = nullptr;
     return msg;
 }
 
 int Channel::Write(const void* data, size_t len,
-                    const handle_t* handles, size_t num_handles) {
+                    const handle_t* handles, size_t num_handles,
+                    bool from_endpoint_b) {
     Message* msg = static_cast<Message*>(kmalloc(sizeof(Message)));
     if (!msg) return -1;
 
@@ -50,17 +51,25 @@ int Channel::Write(const void* data, size_t len,
         }
     }
 
+    // Route: A writes → B's rx queue (queue_b_), B writes → A's rx queue (queue_a_)
     lock_.lock();
-    Enqueue(msg);
+    if (from_endpoint_b) {
+        Enqueue(msg, &head_a_, &tail_a_);
+    } else {
+        Enqueue(msg, &head_b_, &tail_b_);
+    }
     lock_.unlock();
     return 0;
 }
 
 int Channel::Read(void* buf, size_t buf_size, size_t* out_len,
                   handle_t* handle_buf, size_t buf_capacity,
-                  size_t* out_num_handles) {
+                  size_t* out_num_handles,
+                  bool from_endpoint_b) {
     lock_.lock();
-    Message* msg = Dequeue();
+    Message* msg = from_endpoint_b
+        ? Dequeue(&head_b_, &tail_b_)   // B reads from queue_b_ (messages from A)
+        : Dequeue(&head_a_, &tail_a_);  // A reads from queue_a_ (messages from B)
     lock_.unlock();
 
     if (!msg) return -2;
