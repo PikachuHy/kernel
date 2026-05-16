@@ -30,6 +30,7 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 | 5: Scheduler | `docs/superpowers/plans/2026-05-05-phase-5-scheduler.md` | Done |
 | 6: Object Manager + IPC | `docs/superpowers/plans/2026-05-05-phase-6-object-ipc.md` | Done |
 | 7: VMM + Process | `docs/superpowers/plans/2026-05-10-phase-7-vmm-process.md` | Done (incl. 3 fixes) |
+| 8: VFS | `docs/superpowers/plans/2026-05-16-phase-8-vfs.md` | Kernel-side done; FS server IPC wake-up bug |
 | Fix Known Issues | `docs/superpowers/plans/2026-05-05-fix-known-issues.md` | Done (TSS+buddy; paging deferred) |
 
 ## Build / Test / Lint
@@ -52,6 +53,7 @@ bash scripts/run.sh
 
 - **paging_init**: CR3 reload causes crash with Limine's 2MB huge pages. Kernel uses Limine page tables via `paging_save_kernel_template()`. (Phase 2 legacy, deferred)
 - **Channel IPC write/read**: untested from ring 3 — requires `ChannelWriteArgs` packed struct in user-space syscall convention. Basic syscalls (create, close, debug_print, process_exit) verified.
+- **Phase 8 FS server wake-up**: FS servers (devfs, tmpfs) crash with PAGE FAULT at 0x0000000F0000000F when woken from blocking `channel_read` after `thread_yield`. Suspected stack corruption in syscall context switch path. Kernel-side VFS (mount namespace, sys_open routing, handle allocation, Channel IPC) verified working. Timer preemption disabled pending fix.
 
 ## Architecture
 
@@ -62,6 +64,7 @@ kernel/
 │   ├── mm/             # pmm, bitmap_alloc, buddy, slab, vmo, vmm, new_delete
 │   ├── sched/          # scheduler — thread, run queue, context switch
 │   └── object/         # KernelObject, handle table, rights, channel, port, process
+├── fs/                 # VFS mount namespace, protocol, devfs/tmpfs ELF servers
 ├── init/               # init process (ring-3 ELF), linker script
 ├── lib/                # klog, panic, serial, spinlock
 ├── BUILD.bazel
