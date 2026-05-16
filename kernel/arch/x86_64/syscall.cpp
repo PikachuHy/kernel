@@ -275,29 +275,52 @@ uint64_t sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
 // ── VFS syscalls ──────────────────────────────────────────────────
 
 uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
-    const char* path = reinterpret_cast<const char*>(a1);
-    uint64_t flags = a2;
+    // Declare ALL stack variables up front so the compiler can lay
+    // out the frame before any branches or klog calls.
+    const char* path;
+    uint64_t flags;
+    MountEntry* mount;
+    const char* prefix;
+    Channel* file_chan;
+    Process* fs_proc;
+    Rights full_rights;
+    handle_t fs_file_handle;
+    int rc;
+    Process* cur;
+    handle_t client_handle;
+    // Read-loop locals
+    int rc2;
+    size_t out_len;
+    FileResponse resp;
 
-    MountEntry* mount = mount_resolve(path);
-    if (!mount) return INVALID_HANDLE;
+    klog("sys_open:1\n");
+    path = reinterpret_cast<const char*>(a1);
+    flags = a2;
+
+    klog("sys_open:2 mount_resolve\n");
+    mount = mount_resolve(path);
+    if (!mount) { klog("sys_open: no mount\n"); return INVALID_HANDLE; }
+    klog("sys_open:3 mount ok\n");
 
     // Compute the relative path after the mount prefix
-    // Skip past the mount prefix in the full path
-    const char* prefix = mount->path;
+    prefix = mount->path;
     while (*prefix) { path++; prefix++; }
     if (*path == '/') path++;
 
     // Create the file Channel
-    Channel* file_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
-    if (!file_chan) return INVALID_HANDLE;
+    klog("sys_open:4 kmalloc Channel\n");
+    file_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+    if (!file_chan) { klog("sys_open: kmalloc fail\n"); return INVALID_HANDLE; }
     new (file_chan) Channel();
+    klog("sys_open:5 Channel created\n");
 
     // Allocate a handle for the file Channel in the FS server's handle table.
-    // The FS server will use this handle to communicate on the file Channel.
-    Process* fs_proc = mount->fs_process;
-    Rights full_rights{.mask = Rights::Read | Rights::Write |
-                               Rights::Duplicate | Rights::Transfer};
-    handle_t fs_file_handle = fs_proc->handles.Alloc(file_chan, full_rights);
+    fs_proc = mount->fs_process;
+    full_rights = Rights{.mask = Rights::Read | Rights::Write |
+                                 Rights::Duplicate | Rights::Transfer};
+    klog("sys_open:6 Alloc in fs_proc\n");
+    fs_file_handle = fs_proc->handles.Alloc(file_chan, full_rights);
+    klog("sys_open:7 handle alloc done\n");
 
     // Build the Open message payload
     struct OpenPayload {
@@ -307,7 +330,6 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     };
     OpenPayload payload;
     payload.flags = static_cast<uint32_t>(flags);
-    // Copy relative path into payload
     {
         int i = 0;
         while (path[i] && i < 255) { payload.path[i] = path[i]; i++; }
@@ -316,45 +338,47 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     payload.file_handle = fs_file_handle;
 
     // Send Open request to FS server via the mount Channel
-    int rc = mount->fs_channel->Write(&payload, sizeof(payload), nullptr, 0);
+    klog("sys_open:8 Write to mount\n");
+    rc = mount->fs_channel->Write(&payload, sizeof(payload), nullptr, 0);
     if (rc != 0) {
+        klog("sys_open: Write fail\n");
         fs_proc->handles.Free(fs_file_handle);
         file_chan->Release();
         return INVALID_HANDLE;
     }
+    klog("sys_open:9 Write done\n");
 
-    // Wait for the FS server's response ON THE FILE CHANNEL.
-    // The mount Channel has a single queue — if we read from it, we'd get
-    // our own Open request back. The FS server responds on the file Channel.
-    FileResponse resp;
-    size_t out_len;
+    // Blocking read: wait for FS server response.
+    out_len = 0;
     while (true) {
-        rc = file_chan->Read(&resp, sizeof(resp), &out_len,
-                              nullptr, 0, nullptr);
-        if (rc != -2) break;
+        rc2 = file_chan->Read(&resp, sizeof(resp), &out_len, nullptr, 0, nullptr);
+        if (rc2 != -2) break;
         thread_yield();
     }
 
-    if (rc != 0 || resp.result != 0) {
+    if (rc2 != 0 || resp.result != 0) {
+        klog("sys_open: FS response error\n");
         fs_proc->handles.Free(fs_file_handle);
         file_chan->Release();
         return INVALID_HANDLE;
     }
 
     // Allocate a handle for the calling process
-    Process* cur = current_process();
+    cur = current_process();
     if (!cur) {
         fs_proc->handles.Free(fs_file_handle);
         file_chan->Release();
         return INVALID_HANDLE;
     }
 
-    handle_t client_handle = cur->handles.Alloc(file_chan, full_rights);
+    client_handle = cur->handles.Alloc(file_chan, full_rights);
 
-    // Release the temporary reference from construction.
-    // The two handles (fs server + client) each hold a reference.
+    // Release temporary ref from construction; handles own the refs now
     file_chan->Release();
 
+    klog("sys_open:10 done, handle=");
+    klog_hex(client_handle);
+    klog("\n");
     return client_handle;
 }
 

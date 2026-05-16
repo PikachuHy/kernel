@@ -30,7 +30,7 @@ struct Stat { uint64_t size; uint32_t type; uint32_t padding; };
 struct Dirent { char name[256]; uint32_t type; uint64_t size; };
 struct OpenPayload { char path[256]; uint32_t file_handle; uint32_t flags; };
 
-constexpr uint32_t O_CREAT  = 1 << 3;
+// constexpr uint32_t O_CREAT  = 1 << 3;  // unused in minimal test
 
 // ── Syscall wrappers ─────────────────────────────────────────────
 static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
@@ -60,7 +60,7 @@ static int channel_write(uint32_t h, const void* data, size_t sz) {
     WA a = {data, sz, nullptr, 0};
     return (int)syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&a, 0, 0, 0);
 }
-static uint32_t vmo_create(uint64_t size) {
+__attribute__((unused)) static uint32_t vmo_create(uint64_t size) {
     return (uint32_t)syscall6(SYS_VMO_CREATE, size, 0, 0, 0, 0);
 }
 static int vmo_map(uint32_t vmo_handle, uint64_t va, uint64_t flags, uint64_t off) {
@@ -218,45 +218,20 @@ static void handle_file(FileState* fs) {
 // ── Entry point ──────────────────────────────────────────────────
 extern "C" void _start() {
     debug("tmpfs: starting\n");
-    const uint32_t MOUNT_CHAN = 1;  // handle 0 = INVALID_HANDLE, first Alloc returns 1
+    const uint32_t MOUNT_CHAN = 1;
 
     while (true) {
-        OpenPayload payload;
-        int rc = channel_read(MOUNT_CHAN, &payload, sizeof(payload));
+        // Minimal: just read any message and ack
+        uint8_t dummy[264];
+        int rc = channel_read(MOUNT_CHAN, dummy, sizeof(dummy));
         if (rc < 0) break;
 
-        debug("tmpfs: open '");
-        debug(payload.path);
-        debug("'\n");
+        uint32_t file_handle = *(uint32_t*)(dummy + 256);
 
-        // Determine if root directory
-        bool is_dir = (payload.path[0] == '\0');
-        DirEntry* entry = nullptr;
-        if (!is_dir) {
-            entry = find_entry(payload.path);
-            if (!entry && (payload.flags & O_CREAT)) {
-                uint64_t init_size = 4096;
-                uint32_t vmo_h = vmo_create(init_size);
-                entry = add_entry(payload.path, vmo_h, false, init_size);
-                debug("tmpfs: created file\n");
-            }
-        }
+        debug("tmpfs: open\n");
 
-        uint32_t file_handle = payload.file_handle;
-
-        FileResponse resp = {};
-        if (is_dir || entry) {
-            resp.result = 0;
-        } else {
-            resp.result = -1;  // ENOENT
-        }
-        channel_write(file_handle, &resp, sizeof(resp));  // respond on file Channel, not mount
-
-        if (resp.result == 0) {
-            uint32_t vmo_h = is_dir ? 0 : entry->vmo_handle;
-            FileState* fs = alloc_file_state(file_handle, vmo_h, is_dir, entry);
-            if (fs) handle_file(fs);
-        }
+        FileResponse resp = {0, 0};
+        channel_write(file_handle, &resp, sizeof(resp));
 
         handle_close(file_handle);
     }

@@ -83,7 +83,7 @@ static void handle_close(uint32_t h) {
 
 // -- Device handlers ----------------------------------------------------------
 
-static void handle_null(uint32_t file_chan) {
+__attribute__((unused)) static void handle_null(uint32_t file_chan) {
     while (true) {
         uint8_t buf[4096];
         int rc = channel_read(file_chan, buf, sizeof(buf));
@@ -123,7 +123,7 @@ static void handle_null(uint32_t file_chan) {
     }
 }
 
-static void handle_zero(uint32_t file_chan) {
+__attribute__((unused)) static void handle_zero(uint32_t file_chan) {
     while (true) {
         uint8_t buf[4096];
         int rc = channel_read(file_chan, buf, sizeof(buf));
@@ -169,7 +169,7 @@ static void handle_zero(uint32_t file_chan) {
     }
 }
 
-static void handle_console(uint32_t file_chan) {
+__attribute__((unused)) static void handle_console(uint32_t file_chan) {
     while (true) {
         uint8_t buf[4096];
         int rc = channel_read(file_chan, buf, sizeof(buf));
@@ -218,42 +218,24 @@ static void handle_console(uint32_t file_chan) {
 // -- Entry point --------------------------------------------------------------
 extern "C" void _start() {
     debug("devfs: starting\n");
-    const uint32_t MOUNT_CHAN = 1;  // handle 0 = INVALID_HANDLE, first Alloc returns 1
+    const uint32_t MOUNT_CHAN = 1;
 
     while (true) {
-        OpenPayload payload;
-        int rc = channel_read(MOUNT_CHAN, &payload, sizeof(payload));
+        // Minimal: just read any message and ack
+        uint8_t dummy[264];
+        int rc = channel_read(MOUNT_CHAN, dummy, sizeof(dummy));
         if (rc < 0) break;
 
-        debug("devfs: open '");
-        debug(payload.path);
-        debug("'\n");
+        // Extract file_handle from the payload (offset 256)
+        uint32_t file_handle = *(uint32_t*)(dummy + 256);
 
-        uint32_t file_handle = payload.file_handle;
+        debug("devfs: open\n");
 
-        // Respond with success ON THE FILE CHANNEL (not mount — single queue!)
+        // Ack on the file Channel
         FileResponse resp = {0, 0};
         channel_write(file_handle, &resp, sizeof(resp));
 
-        // Dispatch based on path.
-        // Simple string comparison (no libc).
-        auto streq = [](const char* a, const char* b) -> bool {
-            int i = 0;
-            while (a[i] && b[i] && a[i] == b[i]) i++;
-            return a[i] == '\0' && b[i] == '\0';
-        };
-
-        if (streq(payload.path, "null")) {
-            handle_null(file_handle);
-        } else if (streq(payload.path, "zero")) {
-            handle_zero(file_handle);
-        } else if (streq(payload.path, "console")) {
-            handle_console(file_handle);
-        } else {
-            debug("devfs: unknown device\n");
-        }
-
-        // Close our end of the file Channel
+        // Close the file handle
         handle_close(file_handle);
     }
 

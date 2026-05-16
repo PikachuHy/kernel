@@ -87,7 +87,7 @@ extern uint8_t _end;
 
 // Timer preemption callback — drives scheduler_tick() from LAPIC timer.
 
-static bool timer_preempt_callback(uint64_t) {
+__attribute__((unused)) static bool timer_preempt_callback(uint64_t) {
     scheduler_tick();
     return true;
 }
@@ -327,7 +327,8 @@ extern "C" void kernel_entry(void) {
     elf_load_fs_servers();
 
     // Hook timer to scheduler for preemption (every 10ms)
-    timer_periodic(10000, timer_preempt_callback);
+    // FIXME: timer preemption crashes during VFS syscalls (iretq #GP)
+    // timer_periodic(10000, timer_preempt_callback);
 
     // ── Phase 7: VMM + Process + ring-3 ──────────────────────────
     klog("\n=== Phase 7: VMM + Process + ring-3 ===\n\n");
