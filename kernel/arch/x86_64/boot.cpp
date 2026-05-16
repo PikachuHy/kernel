@@ -91,10 +91,9 @@ static bool timer_preempt_callback(uint64_t uptime_ms) {
     scheduler_tick();
 
     if (uptime_ms > 10000) {
-        // QEMU shutdown via keyboard controller reset.
-        // Writing 0xFE to port 0x64 pulses the reset line; QEMU with
-        // -no-reboot exits instead of rebooting.
-        x86::outb(0x64, 0xFE);
+        // QEMU isa-debug-exit: write (code<<1)|1 to port 0xF4.
+        // QEMU exits with the given exit code (0 = success).
+        x86::outb(0xF4, 1);  // (0 << 1) | 1 = exit code 0
         return false;
     }
     return true;
