@@ -85,15 +85,19 @@ __attribute__((unused)) static volatile bool bsp_done = false;
 // Linker symbol: end of BSS
 extern uint8_t _end;
 
-// Timer preemption callback — drives scheduler_tick() from LAPIC timer,
-// and shuts down QEMU after 10 seconds of uptime (for automated testing).
+// Timer preemption callback — drives scheduler_tick() and auto-exits after 10s.
 static bool timer_preempt_callback(uint64_t uptime_ms) {
     scheduler_tick();
 
-    // After ~10 seconds (1000 ticks at 10ms/tick), auto-exit QEMU.
+    // Log every 100 ticks (~1 second) so we can see the timer IS firing.
+    if (uptime_ms % 100 == 0) {
+        klog("[timer tick "); klog_dec(uptime_ms); klog("]\n");
+    }
+
+    // After 10 seconds, power off via ACPI PM register.
     if (uptime_ms > 1000) {
-        klog("\n=== 10s timeout, exiting QEMU ===\n");
-        x86::outb(0xF4, 1);  // (0 << 1) | 1 = exit code 0
+        klog("\n=== 10s timeout, powering off ===\n");
+        x86::outw(0x604, 0x2000);  // ACPI S5 (power off)
         return false;
     }
     return true;

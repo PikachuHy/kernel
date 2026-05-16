@@ -41,5 +41,4 @@ qemu-system-x86_64 \
     -m 512M \
     -smp 2 \
     -nographic \
-    -no-reboot \
-    -device isa-debug-exit,iobase=0xF4,iosize=0x4
+    -no-reboot
