@@ -42,11 +42,7 @@ static Process* s_kernel_process = nullptr;
 
 static void idle_entry(void) {
     while (true) {
-        // HLT wakes on any pending interrupt (even masked). We don't
-        // enable IF, so the interrupt is held pending until the next
-        // thread runs with IF=1. This avoids iretq issues caused by
-        // interrupt frames overwriting the idle thread's tiny stack.
-        asm volatile("hlt");
+        asm volatile("sti; hlt; cli");
     }
 }
 
@@ -106,7 +102,7 @@ static Thread* create_idle_thread(uint32_t cpu_id) {
         reinterpret_cast<uint64_t>(idle_entry);
     *reinterpret_cast<uint64_t*>(frame_base_virt + 64) =
         reinterpret_cast<uint64_t>(thread_exit);
-    *reinterpret_cast<uint64_t*>(frame_base_virt + 48) = 0x002ULL;  // IF=0
+    *reinterpret_cast<uint64_t*>(frame_base_virt + 48) = 0x202ULL;  // IF=1
     t->rflags        = 0x202;
     t->state         = ThreadState::Running;
     t->priority      = 7;          // lowest priority
