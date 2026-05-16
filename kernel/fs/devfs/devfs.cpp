@@ -11,7 +11,6 @@ using uint8_t  = unsigned char;
 using size_t = decltype(sizeof(0));
 
 // -- Syscall numbers ----------------------------------------------------------
-constexpr int SYS_DEBUG_PRINT          = 0;
 constexpr int SYS_CHANNEL_WRITE        = 11;
 constexpr int SYS_CHANNEL_READ         = 12;
 constexpr int SYS_HANDLE_CLOSE         = 1;
@@ -64,10 +63,6 @@ static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
     return ret;
 }
 
-static void debug(const char* msg) {
-    syscall6(SYS_DEBUG_PRINT, (uint64_t)msg, 0, 0, 0, 0);
-}
-
 static int channel_write(uint32_t h, const void* data, size_t len) {
     struct WA { const void* d; size_t sz; const uint32_t* hnd; size_t n; };
     WA a = {data, len, nullptr, 0};
@@ -84,7 +79,7 @@ static void handle_close(uint32_t h) {
 
 // -- Device handlers ----------------------------------------------------------
 
-__attribute__((unused)) static void handle_null(uint32_t file_chan) {
+static void handle_null(uint32_t file_chan) {
     while (true) {
         uint8_t buf[4096];
         int rc = channel_read(file_chan, buf, sizeof(buf));
@@ -124,7 +119,7 @@ __attribute__((unused)) static void handle_null(uint32_t file_chan) {
     }
 }
 
-__attribute__((unused)) static void handle_zero(uint32_t file_chan) {
+static void handle_zero(uint32_t file_chan) {
     while (true) {
         uint8_t buf[4096];
         int rc = channel_read(file_chan, buf, sizeof(buf));
@@ -170,7 +165,7 @@ __attribute__((unused)) static void handle_zero(uint32_t file_chan) {
     }
 }
 
-__attribute__((unused)) static void handle_console(uint32_t file_chan) {
+static void handle_console(uint32_t file_chan) {
     while (true) {
         uint8_t buf[4096];
         int rc = channel_read(file_chan, buf, sizeof(buf));
@@ -178,17 +173,11 @@ __attribute__((unused)) static void handle_console(uint32_t file_chan) {
 
         if ((size_t)rc < sizeof(FileMsg)) continue;
         FileMsg* msg = reinterpret_cast<FileMsg*>(buf);
-        uint8_t* data = buf + sizeof(FileMsg);
-        size_t data_len = (size_t)rc - sizeof(FileMsg);
 
         FileResponse resp = {};
         switch (msg->op) {
         case FileMsg::Write:
-            // Print write data via debug_print
-            for (size_t i = 0; i < data_len && i < msg->length; i++) {
-                char c[2] = { (char)data[i], '\0' };
-                debug(c);
-            }
+            // Discard write data (console is write-only, no echo)
             resp.result = 0;
             resp.size = msg->length;
             channel_write(file_chan, &resp, sizeof(resp));
@@ -218,34 +207,46 @@ __attribute__((unused)) static void handle_console(uint32_t file_chan) {
 
 // -- Entry point --------------------------------------------------------------
 extern "C" void _start() {
-    debug("devfs: starting\n");
     const uint32_t MOUNT_CHAN = 1;
 
-    // Wait for the first Open request
-    uint8_t dummy[sizeof(OpenPayload)];
-    int rc = channel_read(MOUNT_CHAN, dummy, sizeof(dummy));
-    if (rc < 0) {
-        debug("devfs: read error\n");
-        syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);
-        while(1) asm volatile("hlt");
+    while (true) {
+        uint8_t buf[sizeof(OpenPayload)];
+        int rc = channel_read(MOUNT_CHAN, buf, sizeof(buf));
+        if (rc < 0) break;
+
+        OpenPayload* payload = reinterpret_cast<OpenPayload*>(buf);
+        uint32_t file_handle = payload->file_handle;
+        uint32_t ack_handle   = payload->ack_handle;
+        const char* rel = payload->path;
+
+        // Strip leading "/dev/" prefix if present
+        if (rel[0] == '/' && rel[1] == 'd' && rel[2] == 'e' &&
+            rel[3] == 'v' && rel[4] == '/')
+            rel += 5;
+
+        // Write ack on dedicated ack Channel (no contention)
+        FileResponse ack = {0, 0};
+        channel_write(ack_handle, &ack, sizeof(ack));
+        handle_close(ack_handle);
+
+        // Dispatch to device handler (enters per-file I/O loop)
+        if (rel[0] == 'n' && rel[1] == 'u' && rel[2] == 'l' &&
+            rel[3] == 'l' && rel[4] == '\0') {
+            handle_null(file_handle);
+        } else if (rel[0] == 'z' && rel[1] == 'e' && rel[2] == 'r' &&
+                   rel[3] == 'o' && rel[4] == '\0') {
+            handle_zero(file_handle);
+        } else if (rel[0] == 'c' && rel[1] == 'o' && rel[2] == 'n' &&
+                   rel[3] == 's' && rel[4] == 'o' && rel[5] == 'l' &&
+                   rel[6] == 'e' && rel[7] == '\0') {
+            handle_console(file_handle);
+        } else {
+            FileResponse err = {-1, 0};
+            channel_write(file_handle, &err, sizeof(err));
+            handle_close(file_handle);
+        }
     }
 
-    debug("devfs: got open\n");
-
-    uint32_t file_handle = *(uint32_t*)(dummy + 256);
-    uint32_t ack_handle = *(uint32_t*)(dummy + 260);
-    (void)file_handle;
-
-    // Ack on ack Channel
-    FileResponse resp = {0, 0};
-    channel_write(ack_handle, &resp, sizeof(resp));
-
-    debug("devfs: ack sent\n");
-
-    // Close ack handle
-    handle_close(ack_handle);
-
-    debug("devfs: done\n");
     syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);
     while (1) { asm volatile("hlt"); }
 }
