@@ -40,6 +40,7 @@ struct Stat {
 struct OpenPayload {
     char     path[256];
     uint32_t file_handle;
+    uint32_t ack_handle;
     uint32_t flags;
 };
 
@@ -221,7 +222,7 @@ extern "C" void _start() {
     const uint32_t MOUNT_CHAN = 1;
 
     // Wait for the first Open request
-    uint8_t dummy[264];
+    uint8_t dummy[sizeof(OpenPayload)];
     int rc = channel_read(MOUNT_CHAN, dummy, sizeof(dummy));
     if (rc < 0) {
         debug("devfs: read error\n");
@@ -232,15 +233,17 @@ extern "C" void _start() {
     debug("devfs: got open\n");
 
     uint32_t file_handle = *(uint32_t*)(dummy + 256);
+    uint32_t ack_handle = *(uint32_t*)(dummy + 260);
+    (void)file_handle;
 
-    // Ack on file Channel
+    // Ack on ack Channel
     FileResponse resp = {0, 0};
-    channel_write(file_handle, &resp, sizeof(resp));
+    channel_write(ack_handle, &resp, sizeof(resp));
 
     debug("devfs: ack sent\n");
 
-    // Close file handle
-    handle_close(file_handle);
+    // Close ack handle
+    handle_close(ack_handle);
 
     debug("devfs: done\n");
     syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);

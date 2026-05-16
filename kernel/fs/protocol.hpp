@@ -43,3 +43,12 @@ struct Dirent {
     uint32_t type;       // 0 = file, 1 = directory
     uint64_t size;
 };
+
+// Open message sent from kernel to FS server via the mount Channel.
+// The kernel pre-allocates handles in the FS server's handle table.
+struct OpenPayload {
+    char     path[256];
+    uint32_t file_handle;   // FS server: use for file I/O (Read/Write/Close)
+    uint32_t ack_handle;    // FS server: write ack here (kernel reads it)
+    uint32_t flags;
+};

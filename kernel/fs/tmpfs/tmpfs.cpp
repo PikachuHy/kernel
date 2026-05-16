@@ -28,7 +28,7 @@ struct FileMsg {
 struct FileResponse { int32_t result; uint64_t size; };
 struct Stat { uint64_t size; uint32_t type; uint32_t padding; };
 struct Dirent { char name[256]; uint32_t type; uint64_t size; };
-struct OpenPayload { char path[256]; uint32_t file_handle; uint32_t flags; };
+struct OpenPayload { char path[256]; uint32_t file_handle; uint32_t ack_handle; uint32_t flags; };
 
 // constexpr uint32_t O_CREAT  = 1 << 3;  // unused in minimal test
 
@@ -222,18 +222,20 @@ extern "C" void _start() {
 
     while (true) {
         // Minimal: just read any message and ack
-        uint8_t dummy[264];
+        uint8_t dummy[sizeof(OpenPayload)];
         int rc = channel_read(MOUNT_CHAN, dummy, sizeof(dummy));
         if (rc < 0) break;
 
         uint32_t file_handle = *(uint32_t*)(dummy + 256);
+        uint32_t ack_handle = *(uint32_t*)(dummy + 260);
+        (void)file_handle;
 
         debug("tmpfs: open\n");
 
         FileResponse resp = {0, 0};
-        channel_write(file_handle, &resp, sizeof(resp));
+        channel_write(ack_handle, &resp, sizeof(resp));
 
-        handle_close(file_handle);
+        handle_close(ack_handle);
     }
 
     debug("tmpfs: exiting\n");

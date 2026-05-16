@@ -285,6 +285,8 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     Process* fs_proc;
     Rights full_rights;
     handle_t fs_file_handle;
+    Channel* ack_chan;
+    handle_t fs_ack_handle;
     int rc;
     Process* cur;
     handle_t client_handle;
@@ -315,10 +317,23 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
                                  Rights::Duplicate | Rights::Transfer};
     fs_file_handle = fs_proc->handles.Alloc(file_chan, full_rights);
 
+    // Create dedicated ack Channel (no contention with file I/O handler)
+    ack_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+    if (!ack_chan) {
+        fs_proc->handles.Free(fs_file_handle);
+        file_chan->Release();
+        return INVALID_HANDLE;
+    }
+    new (ack_chan) Channel();
+
+    // Allocate handle in FS server's table for ack_chan
+    fs_ack_handle = fs_proc->handles.Alloc(ack_chan, full_rights);
+
     // Build the Open message payload
     struct OpenPayload {
         char     path[256];
         uint32_t file_handle;
+        uint32_t ack_handle;
         uint32_t flags;
     };
     OpenPayload payload;
@@ -329,25 +344,30 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
         payload.path[i] = '\0';
     }
     payload.file_handle = fs_file_handle;
+    payload.ack_handle = fs_ack_handle;
 
     // Send Open request to FS server via the mount Channel
     rc = mount->fs_channel->Write(&payload, sizeof(payload), nullptr, 0);
     if (rc != 0) {
         fs_proc->handles.Free(fs_file_handle);
+        fs_proc->handles.Free(fs_ack_handle);
         file_chan->Release();
+        ack_chan->Release();
         return INVALID_HANDLE;
     }
-    // Blocking read: wait for FS server response.
+    // Blocking read: wait for FS server ack on ack_chan (no contention)
     out_len = 0;
     while (true) {
-        rc2 = file_chan->Read(&resp, sizeof(resp), &out_len, nullptr, 0, nullptr);
+        rc2 = ack_chan->Read(&resp, sizeof(resp), &out_len, nullptr, 0, nullptr);
         if (rc2 != -2) break;
         thread_yield();
     }
 
     if (rc2 != 0 || resp.result != 0) {
         fs_proc->handles.Free(fs_file_handle);
+        fs_proc->handles.Free(fs_ack_handle);
         file_chan->Release();
+        ack_chan->Release();
         return INVALID_HANDLE;
     }
 
@@ -355,7 +375,9 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     cur = current_process();
     if (!cur) {
         fs_proc->handles.Free(fs_file_handle);
+        fs_proc->handles.Free(fs_ack_handle);
         file_chan->Release();
+        ack_chan->Release();
         return INVALID_HANDLE;
     }
 
@@ -363,6 +385,9 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
 
     // Release temporary ref from construction; handles own the refs now
     file_chan->Release();
+
+    // ack_chan ref now held only by FS server; it will close after ack
+    ack_chan->Release();
 
     return client_handle;
 }
