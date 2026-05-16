@@ -54,6 +54,7 @@ bash scripts/run.sh
 - **paging_init**: CR3 reload causes crash with Limine's 2MB huge pages. Kernel uses Limine page tables via `paging_save_kernel_template()`. (Phase 2 legacy, deferred)
 - **Channel IPC write/read**: untested from ring 3 — requires `ChannelWriteArgs` packed struct in user-space syscall convention. Basic syscalls (create, close, debug_print, process_exit) verified.
 - **Phase 8 FS server wake-up**: FS servers (devfs, tmpfs) crash with PAGE FAULT at 0x0000000F0000000F when woken from blocking `channel_read` after `thread_yield`. Suspected stack corruption in syscall context switch path. Kernel-side VFS (mount namespace, sys_open routing, handle allocation, Channel IPC) verified working. Timer preemption disabled pending fix.
+- **Timer preemption iretq #GP**: LAPIC timer preemption crashes at `iretq` in IRQ stubs when returning to ring 3. Same root cause as syscall stack issue — global `user_rsp_save`/`temp_kstack` in interrupt path. #PF timer interaction deferred.
 
 ## Architecture
 
