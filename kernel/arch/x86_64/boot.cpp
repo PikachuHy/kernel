@@ -89,15 +89,14 @@ extern uint8_t _end;
 static bool timer_preempt_callback(uint64_t uptime_ms) {
     scheduler_tick();
 
-    // Log every 100 ticks (~1 second) so we can see the timer IS firing.
-    if (uptime_ms % 100 == 0) {
-        klog("[timer tick "); klog_dec(uptime_ms); klog("]\n");
-    }
+    // Write to serial port every tick so we can see if timer fires.
+    // Use '0'-'9' for the ones digit of uptime.
+    serial_putc('0' + (char)(uptime_ms % 10));
 
-    // After 10 seconds, power off via ACPI PM register.
     if (uptime_ms > 1000) {
-        klog("\n=== 10s timeout, powering off ===\n");
-        x86::outw(0x604, 0x2000);  // ACPI S5 (power off)
+        serial_putc('X');
+        // ACPI PM1a_CNT: SLP_TYP=5 (S5/soft-off) | SLP_EN
+        x86::outw(0x604, 0x3400);
         return false;
     }
     return true;
