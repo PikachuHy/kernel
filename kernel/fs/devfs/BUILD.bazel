@@ -9,7 +9,7 @@ genrule(
           "-ffreestanding -nostdlib " +
           "-std=c++26 " +
           "-fno-exceptions -fno-rtti " +
-          "-Wall -Wextra -Werror " +
+          "-Wall -Wextra -Werror -Wno-unused-function " +
           "-O2 " +
           "-mno-sse -mno-sse2 -mgeneral-regs-only " +
           "-mcmodel=small " +

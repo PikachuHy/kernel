@@ -280,9 +280,6 @@ extern "C" void elf_load_fs_servers() {
             return;
         }
 
-        // Create mount Channel pair for devfs.
-        // The Channel is bidirectional — kernel writes Open requests,
-        // FS server reads them on handle 0 and writes responses back.
         Channel* mount_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
         if (!mount_chan) {
             klog("  FAILED to create devfs mount Channel\n");
@@ -290,15 +287,12 @@ extern "C" void elf_load_fs_servers() {
         }
         new (mount_chan) Channel();
 
-        // Allocate handle 0 in the devfs process for this Channel
         Rights full{.mask = Rights::Read | Rights::Write |
                            Rights::Duplicate | Rights::Transfer};
         proc->handles.Alloc(mount_chan, full);
 
-        // Register the mount (kernel keeps its reference via mount table)
         mount_add("/dev", mount_chan, proc);
 
-        // Start the devfs server thread
         thread_start(thr);
         klog("  devfs server started, mounted at /dev\n");
     }

@@ -28,6 +28,13 @@ static Thread*  s_idle_threads[MAX_CPUS];
 static uint64_t g_hhdm = 0;
 static bool     g_sched_initialized = false;
 static uint32_t g_next_tid = 1;
+
+// Kernel stack top for syscall_entry. Mirrors TSS RSP0, but is a
+// global variable accessible from assembly. Updated on every thread
+// switch so syscall_entry always has the correct per-thread stack.
+// Must be extern "C" and defined here (not in syscall_entry.S) so
+// the linker resolves it for both C++ and asm code.
+extern "C" uint64_t g_syscall_kstack_top = 0;
 static Process* s_kernel_process = nullptr;
 
 // ── Idle thread ──────────────────────────────────────────────────────
@@ -194,6 +201,7 @@ void scheduler_start() {
     if (first->kernel_stack) {
         uint64_t rsp0 = DIRECT_MAP_BASE + first->kernel_stack + PAGE_SIZE * 4;
         tss_set_rsp0(rsp0);
+        g_syscall_kstack_top = rsp0;
     }
 
     // Load the thread's saved stack pointer and restore all callee-saved
@@ -279,6 +287,7 @@ void scheduler_schedule() {
     if (next->kernel_stack) {
         uint64_t rsp0 = DIRECT_MAP_BASE + next->kernel_stack + PAGE_SIZE * 4;
         tss_set_rsp0(rsp0);
+        g_syscall_kstack_top = rsp0;
     }
 
     // Perform the context switch

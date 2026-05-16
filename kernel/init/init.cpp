@@ -48,15 +48,14 @@ static void print_hex(uint64_t n) {
 extern "C" void _start() {
     print("=== init: VFS test ===\n");
 
-    // Test: Open /dev/console via sys_open
+    // Test sys_open to /dev/console
     uint64_t h = syscall6(SYS_OPEN,
-        (uint64_t)"/hello.txt", 0x8, 0, 0, 0);  // O_CREAT
-    print("  sys_open(/hello.txt): ");
+        (uint64_t)"/dev/console", 0x2, 0, 0, 0);  // O_WRONLY
+    print("  sys_open: ");
     print_hex(h);
     print("\n");
 
     print("=== init: done ===\n");
     syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);
-
     while (1) { asm volatile("hlt"); }
 }

@@ -220,26 +220,29 @@ extern "C" void _start() {
     debug("devfs: starting\n");
     const uint32_t MOUNT_CHAN = 1;
 
-    while (true) {
-        // Minimal: just read any message and ack
-        uint8_t dummy[264];
-        int rc = channel_read(MOUNT_CHAN, dummy, sizeof(dummy));
-        if (rc < 0) break;
-
-        // Extract file_handle from the payload (offset 256)
-        uint32_t file_handle = *(uint32_t*)(dummy + 256);
-
-        debug("devfs: open\n");
-
-        // Ack on the file Channel
-        FileResponse resp = {0, 0};
-        channel_write(file_handle, &resp, sizeof(resp));
-
-        // Close the file handle
-        handle_close(file_handle);
+    // Wait for the first Open request
+    uint8_t dummy[264];
+    int rc = channel_read(MOUNT_CHAN, dummy, sizeof(dummy));
+    if (rc < 0) {
+        debug("devfs: read error\n");
+        syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);
+        while(1) asm volatile("hlt");
     }
 
-    debug("devfs: exiting\n");
+    debug("devfs: got open\n");
+
+    uint32_t file_handle = *(uint32_t*)(dummy + 256);
+
+    // Ack on file Channel
+    FileResponse resp = {0, 0};
+    channel_write(file_handle, &resp, sizeof(resp));
+
+    debug("devfs: ack sent\n");
+
+    // Close file handle
+    handle_close(file_handle);
+
+    debug("devfs: done\n");
     syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);
     while (1) { asm volatile("hlt"); }
 }
