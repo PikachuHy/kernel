@@ -51,8 +51,7 @@ bash scripts/run.sh
 
 ## Known Issues
 
-- **paging_init**: CR3 reload causes crash with Limine's 2MB huge pages. Kernel uses Limine page tables via `paging_save_kernel_template()`. (Phase 2 legacy, deferred)
-- **FS server multi-open event loop**: devfs/tmpfs servers are one-shot — process one Open request then exit. Event loop for handling multiple opens has an ack race between kernel and FS server handler on the file Channel.
+(None — all previously deferred issues resolved in fix-remaining branch.)
 
 ## Architecture
 
