@@ -323,12 +323,14 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
         return INVALID_HANDLE;
     }
 
-    // Wait for the FS server's response
+    // Wait for the FS server's response ON THE FILE CHANNEL.
+    // The mount Channel has a single queue — if we read from it, we'd get
+    // our own Open request back. The FS server responds on the file Channel.
     FileResponse resp;
     size_t out_len;
     while (true) {
-        rc = mount->fs_channel->Read(&resp, sizeof(resp), &out_len,
-                                      nullptr, 0, nullptr);
+        rc = file_chan->Read(&resp, sizeof(resp), &out_len,
+                              nullptr, 0, nullptr);
         if (rc != -2) break;
         thread_yield();
     }

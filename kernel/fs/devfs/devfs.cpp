@@ -231,9 +231,9 @@ extern "C" void _start() {
 
         uint32_t file_handle = payload.file_handle;
 
-        // Respond with success
+        // Respond with success ON THE FILE CHANNEL (not mount — single queue!)
         FileResponse resp = {0, 0};
-        channel_write(MOUNT_CHAN, &resp, sizeof(resp));
+        channel_write(file_handle, &resp, sizeof(resp));
 
         // Dispatch based on path.
         // Simple string comparison (no libc).

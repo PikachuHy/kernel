@@ -250,7 +250,7 @@ extern "C" void _start() {
         } else {
             resp.result = -1;  // ENOENT
         }
-        channel_write(MOUNT_CHAN, &resp, sizeof(resp));
+        channel_write(file_handle, &resp, sizeof(resp));  // respond on file Channel, not mount
 
         if (resp.result == 0) {
             uint32_t vmo_h = is_dir ? 0 : entry->vmo_handle;
