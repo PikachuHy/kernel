@@ -4,8 +4,6 @@
 
 namespace {
 
-uint64_t g_hhdm = 0;
-
 // Bitmap: one bit per 4KB page. Sized for up to 4GB physical address space.
 // 4GB / 4KB = 1M pages, 1M bits / 64 = 16K uint64_t entries = 128KB.
 constexpr size_t MAX_PAGES = 1024 * 1024;

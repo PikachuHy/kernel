@@ -2,24 +2,26 @@
 #include "kernel/core/mm/bitmap_alloc.hpp"
 #include "kernel/core/mm/buddy.hpp"
 #include "kernel/lib/klog.hpp"
+#include "kernel/lib/serial.hpp"
 #include "kernel/lib/panic.hpp"
+
+uint64_t g_hhdm = 0;
 
 namespace {
 
-uint64_t g_hhdm = 0;
 uint64_t g_kernel_template_pml4 = 0;
 
 inline uint64_t* hhdm_ptr(uint64_t phys) {
-    return reinterpret_cast<uint64_t*>(DIRECT_MAP_BASE + phys);
+    return reinterpret_cast<uint64_t*>(g_hhdm + phys);
 }
 
 // Allocate a zeroed page table page. Returns physical address, or 0 on OOM.
-// Uses buddy_alloc_pages for runtime allocations (page fault handling).
+// buddy_alloc_pages returns a PHYSICAL address (idx_to_phys).
 static uint64_t alloc_table_phys() {
     void* phys = buddy_alloc_pages(0);
     if (!phys) return 0;
     uint64_t phys_addr = reinterpret_cast<uint64_t>(phys);
-    uint64_t* virt = reinterpret_cast<uint64_t*>(DIRECT_MAP_BASE + phys_addr);
+    uint64_t* virt = hhdm_ptr(phys_addr);
     for (int i = 0; i < 512; i++) virt[i] = 0;
     return phys_addr;
 }
@@ -108,15 +110,24 @@ void paging_init(
         new_pml4[i] = (i == ki4) ? 0 : old_pml4[i];
     }
 
-    // Map kernel pages as 4K mappings
+    // Map kernel pages as 4K mappings.
+    // Don't assume kernel_phys_base == kernel_virt_base - hhdm — Limine loads
+    // the kernel ELF at some physical address that may differ from the simple
+    // linear calculation. Instead, look up each page from Limine's PML4.
     uint64_t kernel_pages = (kernel_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    kernel_pages += PAGE_SIZE * 16;  // Extra 64KB for BSS tail + stack beyond _end
     klog("Paging: mapping kernel (");
     klog_hex(kernel_pages);
     klog(" bytes)...\n");
 
     for (uint64_t off = 0; off < kernel_pages; off += PAGE_SIZE) {
         uint64_t va = kernel_virt_base + off;
-        uint64_t pa = kernel_phys_base + off;
+        // Look up physical address from Limine's existing PML4
+        uint64_t pa = page_table_lookup(old_cr3, va);
+        if (!pa) {
+            // Fallback: assume linear mapping from kernel_phys_base
+            pa = kernel_phys_base + off;
+        }
         uint64_t* pte = nullptr;
         if (!walk_create(new_pml4_phys, va, &pte)) {
             KPANIC("paging_init: OOM during kernel mapping");
@@ -127,6 +138,9 @@ void paging_init(
     // Map direct-map region (DIRECT_MAP_BASE -> phys 0)
     // Use 2MB huge pages for efficiency. Map 128GB range.
     klog("Paging: mapping direct map...\n");
+    // Clear any pre-existing direct map entry inherited from Limine's PML4
+    // so that we always allocate fresh PDPT/PD page tables below.
+    new_pml4[pml4_index(DIRECT_MAP_BASE)] = 0;
     for (uint64_t pa = 0; pa < 0x2000000000ULL; pa += LARGE_PAGE_SIZE) {
         uint64_t va = DIRECT_MAP_BASE + pa;
         uint16_t i4 = pml4_index(va);
@@ -150,17 +164,13 @@ void paging_init(
         pd[i2] = make_pte(pa, PageFlags::Present | PageFlags::Writable | PageFlags::Huge);
     }
 
-    // Load new page tables
-    klog("Paging: loading CR3...\n");
-    // Debug: verify PML4 entries before CR3 reload
+    // Load new page tables and cut over from Limine HHDM to kernel direct map
     uint64_t cr3_val = new_pml4_phys;
-    klog("Paging: CR3 = "); klog_hex(cr3_val); klog("\n");
-    uint64_t* dbg_pml4 = hhdm_ptr(new_pml4_phys);
-    klog("Paging: PML4[511](kernel) = "); klog_hex(dbg_pml4[511]); klog("\n");
-    klog("Paging: PML4[256](dmap)  = "); klog_hex(dbg_pml4[256]); klog("\n");
-    klog("Paging: PML4[0](user)    = "); klog_hex(dbg_pml4[0]); klog("\n");
+    uint64_t limine_hhdm = g_hhdm;
     asm volatile("mov %0, %%cr3" :: "r"(cr3_val) : "memory");
-    klog("Paging: new page tables active\n");
+    g_hhdm = DIRECT_MAP_BASE;
+    klog_reinit_fb(limine_hhdm);
+    klog("Paging: kernel PML4 active\n");
 }
 
 void paging_save_kernel_template() {

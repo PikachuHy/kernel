@@ -1,9 +1,9 @@
 #include "kernel/arch/x86_64/apic.hpp"
+#include "kernel/arch/x86_64/paging.hpp"
 #include "kernel/arch/x86_64/io.hpp"
 #include "kernel/lib/klog.hpp"
 
 namespace {
-uint64_t g_hhdm = 0;
 uint64_t g_lapic_phys  = LAPIC_BASE_PHYS;
 uint64_t g_ioapic_phys = IOAPIC_BASE_PHYS;
 bool     g_apic_ready = false;

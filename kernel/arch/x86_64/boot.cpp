@@ -200,25 +200,26 @@ extern "C" void kernel_entry(void) {
         klog("\n");
     }
 
-    // 3. Higher-half paging takeover
-    // paging_init has a CR3-reload triple-fault bug (debugging in progress).
-    // For now, use Limine's page tables and save them as the kernel template.
-    klog("Using Limine page tables...\n");
-    paging_save_kernel_template();
-
-    // 4. Buddy allocator
+    // 4. Buddy allocator (must be before paging_init — page table pages)
     klog("Initializing buddy allocator...\n");
     buddy_init(hhdm, 0);
     klog("  buddy ready\n\n");
+
+    // TSS: must be before paging_init so that #PF/#DF IST stacks are valid
+    // when the first page fault occurs after CR3 switch.
+    klog("Initializing TSS...\n");
+    tss_init();
+
+    // 3. Higher-half paging takeover
+    klog("Initializing kernel page tables...\n");
+    paging_init(hhdm, kernel_phys, kernel_virt, kernel_size);
+    paging_save_kernel_template();
+    klog("  kernel PML4 active\n\n");
 
     // 5. Slab allocator using buddy for slab pages
     klog("Initializing slab allocator...\n");
     slab_init(hhdm);
     klog("  kmalloc ready (16B-2048B)\n\n");
-
-    // TSS: must be after bitmap_init since it allocates kernel interrupt stacks
-    klog("Initializing TSS...\n");
-    tss_init();
 
     // ── kmalloc / new / delete demo ──
     {

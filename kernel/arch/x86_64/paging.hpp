@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+extern uint64_t g_hhdm;
+
 constexpr uint64_t PAGE_SIZE = 0x1000;
 constexpr uint64_t LARGE_PAGE_SIZE = 0x200000;
 constexpr uint64_t HUGE_PAGE_SIZE = 0x40000000;

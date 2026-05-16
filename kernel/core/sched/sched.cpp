@@ -25,7 +25,6 @@
 static RunQueue s_run_queues[MAX_CPUS];
 static Thread*  s_current_threads[MAX_CPUS];
 static Thread*  s_idle_threads[MAX_CPUS];
-static uint64_t g_hhdm = 0;
 static bool     g_sched_initialized = false;
 static uint32_t g_next_tid = 1;
 
