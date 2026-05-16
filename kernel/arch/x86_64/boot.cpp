@@ -85,10 +85,18 @@ __attribute__((unused)) static volatile bool bsp_done = false;
 // Linker symbol: end of BSS
 extern uint8_t _end;
 
-// Timer preemption callback — drives scheduler_tick() from LAPIC timer.
-
-static bool timer_preempt_callback(uint64_t) {
+// Timer preemption callback — drives scheduler_tick() from LAPIC timer,
+// and shuts down QEMU after 10 seconds of uptime (for automated testing).
+static bool timer_preempt_callback(uint64_t uptime_ms) {
     scheduler_tick();
+
+    if (uptime_ms > 10000) {
+        // QEMU shutdown via keyboard controller reset.
+        // Writing 0xFE to port 0x64 pulses the reset line; QEMU with
+        // -no-reboot exits instead of rebooting.
+        x86::outb(0x64, 0xFE);
+        return false;
+    }
     return true;
 }
 
