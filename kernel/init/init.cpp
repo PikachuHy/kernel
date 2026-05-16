@@ -152,9 +152,24 @@ extern "C" void _start(){
         cl(fh2);
     }
 
+    // 9. large file (> 4096 bytes)
+    pr("9. large file: ");
+    uint64_t lfh = s6(SYS_OPEN, (uint64_t)"/big.bin", 0xC, 0, 0, 0);
+    if (lfh == INV || lfh == 0) T_FAIL("large file", "create");
+    else {
+        uint8_t wb[sizeof(FileMsg) + 5000];
+        FileMsg* w = (FileMsg*)wb;
+        w->op = FileMsg::Write; w->flags = 0; w->offset = 0; w->length = 5000;
+        cw(lfh, wb, sizeof(FileMsg) + 5000);
+        FileResponse wr; cr(lfh, &wr, sizeof(wr));
+        if (wr.size == 5000) T_OK("large write 5000 bytes");
+        else T_FAIL("large write", "size mismatch");
+        cl(lfh);
+    }
+
     // summary
     pr("\n=== "); ph(pass); pr(" passed, "); ph(fail); pr(" failed ===\n");
-    if (fail == 0 && pass == 8) pr("*** ALL TESTS PASSED ***\n");
+    if (fail == 0 && pass == 9) pr("*** ALL TESTS PASSED ***\n");
     pr("=== init: done ===\n");
     s6(SYS_PROCESS_EXIT,0,0,0,0,0);
     while(1) asm volatile("hlt");

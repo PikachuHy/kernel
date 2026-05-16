@@ -109,12 +109,15 @@ static DirEntry* add_to_dir(DirEntry* parent, const char* name,
 }
 
 // ── Per-open file state ──────────────────────────────────────────
+constexpr int MAX_PAGES = 16;  // 64KB max per file
+
 struct FileState {
     uint32_t  file_chan;
-    uint32_t  vmo_handle;
+    uint32_t  vmo_pages[MAX_PAGES];  // one VMO handle per 4KB page
+    int       page_count;
     uint64_t  cursor;
     bool      is_dir;
-    DirEntry* entry;     // pointer to the directory entry (for size)
+    DirEntry* entry;
     FileState* next;
 };
 
@@ -126,7 +129,12 @@ static FileState* alloc_file_state(uint32_t fchan, uint32_t vmo, bool dir, DirEn
     if (fspool_idx >= 64) return nullptr;
     FileState* fs = &fspool[fspool_idx++];
     fs->file_chan = fchan;
-    fs->vmo_handle = vmo;
+    for (int i = 0; i < MAX_PAGES; i++) fs->vmo_pages[i] = 0;
+    fs->page_count = 0;
+    if (vmo) {
+        fs->vmo_pages[0] = vmo;
+        fs->page_count = 1;
+    }
     fs->cursor = 0;
     fs->is_dir = dir;
     fs->entry = e;
@@ -137,11 +145,8 @@ static FileState* alloc_file_state(uint32_t fchan, uint32_t vmo, bool dir, DirEn
 
 // ── File handler ─────────────────────────────────────────────────
 static void handle_file(FileState* fs) {
-    // Map the VMO at a fixed address
+    // Map pages on demand in Read/Write handlers
     const uint64_t MAP_BASE = 0x70000000000ULL;
-    if (fs->vmo_handle) {
-        vmo_map(fs->vmo_handle, MAP_BASE, 0x3, 0);  // RW
-    }
 
     while (true) {
         uint8_t buf[4096];
@@ -159,37 +164,63 @@ static void handle_file(FileState* fs) {
 
         switch (msg->op) {
         case FileMsg::Read: {
-            uint64_t fsize = fs->entry ? fs->entry->size : 0;
-            uint64_t off = msg->offset;
-            size_t count = msg->length;
-            if (off >= fsize) {
-                count = 0;
-            } else if (off + count > fsize) {
-                count = fsize - off;
-            }
+            size_t offset = msg->offset;
+            size_t total = msg->length;
+            if (total > 4096 - sizeof(FileResponse))
+                total = 4096 - sizeof(FileResponse);
+
             uint8_t out[sizeof(FileResponse) + 4096];
-            *(FileResponse*)out = {0, count};
-            uint8_t* src = reinterpret_cast<uint8_t*>(MAP_BASE + off);
-            for (size_t i = 0; i < count; i++)
-                out[sizeof(FileResponse) + i] = src[i];
-            channel_write(fs->file_chan, out, sizeof(FileResponse) + count);
+            size_t read_bytes = 0;
+
+            for (int i = 0; i < fs->page_count && read_bytes < total; i++) {
+                size_t page_base = i * 4096;
+                if (offset >= page_base + 4096) continue;
+                size_t page_off = (offset < page_base) ? 0 : (offset - page_base);
+                size_t chunk = 4096 - page_off;
+                if (chunk > total - read_bytes) chunk = total - read_bytes;
+                uint64_t file_size = fs->entry ? fs->entry->size : 0;
+                if (offset + chunk > file_size) chunk = file_size > offset ? file_size - offset : 0;
+
+                if (chunk > 0 && fs->vmo_pages[i]) {
+                    vmo_map(fs->vmo_pages[i], MAP_BASE, 3, 0);
+                    uint8_t* src = (uint8_t*)MAP_BASE + page_off;
+                    for (size_t j = 0; j < chunk; j++)
+                        out[sizeof(FileResponse) + read_bytes + j] = src[j];
+                    read_bytes += chunk; offset += chunk;
+                }
+            }
+            *(FileResponse*)out = {0, read_bytes};
+            channel_write(fs->file_chan, out, sizeof(FileResponse) + read_bytes);
             break;
         }
         case FileMsg::Write: {
-            size_t count = data_len;
-            if (msg->offset + count > file_size) {
-                uint64_t new_sz = msg->offset + count;
-                if (new_sz > 4096) {
-                    if (msg->offset < 4096) count = 4096 - msg->offset;
-                    else count = 0;
-                    new_sz = 4096;
+            size_t offset = msg->offset;
+            size_t remaining = data_len;
+            size_t written = 0;
+
+            while (remaining > 0 && (int)(offset / 4096) < MAX_PAGES) {
+                int pi = offset / 4096;
+                if (pi >= fs->page_count || !fs->vmo_pages[pi]) {
+                    uint32_t vmo = vmo_create(4096);
+                    if (!vmo) break;
+                    fs->vmo_pages[pi] = vmo;
+                    if (pi >= fs->page_count) fs->page_count = pi + 1;
+                    vmo_map(vmo, MAP_BASE, 3, 0);
+                } else {
+                    vmo_map(fs->vmo_pages[pi], MAP_BASE, 3, 0);
                 }
-                if (fs->entry) fs->entry->size = new_sz;
+
+                size_t page_off = offset % 4096;
+                size_t chunk = 4096 - page_off;
+                if (chunk > remaining) chunk = remaining;
+
+                uint8_t* dst = (uint8_t*)MAP_BASE + page_off;
+                for (size_t i = 0; i < chunk; i++) dst[i] = data[i];
+                written += chunk; remaining -= chunk; offset += chunk; data += chunk;
             }
-            uint8_t* dst = reinterpret_cast<uint8_t*>(MAP_BASE + msg->offset);
-            for (size_t i = 0; i < count; i++) dst[i] = data[i];
-            resp.result = 0;
-            resp.size = count;
+            if (fs->entry && offset > (uint64_t)fs->entry->size)
+                fs->entry->size = offset;
+            resp.result = 0; resp.size = written;
             channel_write(fs->file_chan, &resp, sizeof(resp));
             break;
         }
