@@ -207,13 +207,18 @@ Process* elf_load(const void* elf_data, size_t elf_size,
         }
 
         // Map the VMO into the process address space (only if new).
+        // Skip if this VA range is already covered (consecutive PT_LOAD
+        // segments that share the same starting page would overlap).
         if (own_vmo) {
-            if (!proc->Map(vmo, va_page, 0, size_pg, vm_flags)) {
-                klog("elf_load: Map failed at ");
-                klog_hex(va_page); klog("\n");
-                vmo->Release();
-                proc->Release();
-                return nullptr;
+            VmRegion* existing = vmm_find_region(proc->regions, va_page);
+            if (!existing) {
+                if (!proc->Map(vmo, va_page, 0, size_pg, vm_flags)) {
+                    klog("elf_load: Map failed at ");
+                    klog_hex(va_page); klog("\n");
+                    vmo->Release();
+                    proc->Release();
+                    return nullptr;
+                }
             }
         }
 
