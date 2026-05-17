@@ -100,9 +100,7 @@ extern "C" void _start() {
     print("\n");
 
     if (fh != 0 && fh != 0xFFFFFFFF) {
-        // For now, just verify the file was opened successfully.
-        // File read/decode will be added after the FAT32 server matures.
-        print("  [3] /kernel.elf opened OK\n");
+        print("  [3] /kernel.elf opened OK via FAT32\n");
     } else {
         print("  [3] /kernel.elf NOT FOUND\n");
     }
