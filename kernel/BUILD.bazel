@@ -17,6 +17,7 @@ cc_binary(
         "//kernel/core/mm:vmo",
         "//kernel/core/mm:vmm",
         "//kernel/core/sched:sched",
+        "//kernel/core/blk:blk",
     ],
     additional_linker_inputs = ["//kernel/arch/x86_64:linker_script"],
     linkopts = ["-Wl,-T,$(location //kernel/arch/x86_64:linker_script)"],
