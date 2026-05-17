@@ -1,7 +1,6 @@
 #include "kernel/fs/mount.hpp"
 #include "kernel/core/object/channel.hpp"
 #include "kernel/core/object/process.hpp"
-#include "kernel/lib/klog.hpp"
 
 static MountEntry g_mounts[MAX_MOUNTS];
 static size_t     g_mount_count = 0;
@@ -70,9 +69,8 @@ MountEntry* mount_resolve(const char* path) {
     size_t best_len = 0;
     for (size_t i = 0; i < MAX_MOUNTS; i++) {
         if (!g_mounts[i].active) continue;
-        klog("mount_resolve: i="); klog_hex(i); klog("\n");
         const char* prefix = g_mounts[i].path;
-        klog("  prefix="); klog(prefix); klog("\n");
+        // Check if prefix is a path-prefix of path
         size_t j = 0;
         while (prefix[j] && path[j] && prefix[j] == path[j]) j++;
         if (prefix[j] == '\0' && (path[j] == '/' || path[j] == '\0' || j == 1)) {
@@ -83,11 +81,4 @@ MountEntry* mount_resolve(const char* path) {
         }
     }
     return best;
-}
-
-extern "C" MountEntry* g_mounts_first_active() {
-    for (size_t i = 0; i < MAX_MOUNTS; i++) {
-        if (g_mounts[i].active) return &g_mounts[i];
-    }
-    return nullptr;
 }
