@@ -19,6 +19,7 @@
 #include "kernel/arch/x86_64/io.hpp"
 #include "kernel/arch/x86_64/acpi.hpp"
 #include "kernel/arch/x86_64/smp.hpp"
+#include "kernel/arch/x86_64/pci.hpp"
 #include "kernel/core/object/handle_table.hpp"
 #include "kernel/core/object/channel.hpp"
 #include "kernel/core/object/port.hpp"
@@ -325,6 +326,13 @@ extern "C" void kernel_entry(void) {
     klog("Loading filesystem servers...\n");
     extern void elf_load_fs_servers();
     elf_load_fs_servers();
+
+    // ── Phase 9: Block Layer ──
+    klog("\n=== Phase 9: Block Layer ===\n\n");
+
+    klog("Initializing PCI...\n");
+    pci_init();
+    klog("PCI enumeration complete\n\n");
 
     // Hook timer to scheduler for preemption (every 10ms)
     timer_periodic(10000, timer_preempt_callback);
