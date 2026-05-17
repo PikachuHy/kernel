@@ -207,11 +207,29 @@ Process* elf_load(const void* elf_data, size_t elf_size,
         }
 
         // Map the VMO into the process address space (only if new).
-        // Skip if this VA range is already covered (consecutive PT_LOAD
-        // segments that share the same starting page would overlap).
         if (own_vmo) {
             VmRegion* existing = vmm_find_region(proc->regions, va_page);
-            if (!existing) {
+            if (existing) {
+                // This VA range is already mapped by a previous segment.
+                // Copy the new segment data into the existing VMO.
+                // Use the absolute VMO offset: vaddr - existing_region_base.
+                uint64_t vmo_off = ph->vaddr - existing->base_va;
+                const uint8_t* src = reinterpret_cast<const uint8_t*>(elf_data) + ph->offset;
+                uint64_t remaining = ph->filesz;
+                while (remaining > 0) {
+                    uint64_t phys = existing->vmo->GetPage(vmo_off, true);
+                    if (!phys) break;
+                    uint8_t* dst = reinterpret_cast<uint8_t*>(DIRECT_MAP_BASE + phys);
+                    uint64_t po = vmo_off & (PAGE_SIZE - 1);
+                    uint64_t cs = PAGE_SIZE - po;
+                    if (cs > remaining) cs = remaining;
+                    for (uint64_t i = 0; i < cs; i++) dst[po + i] = src[i];
+                    vmo_off += cs; src += cs; remaining -= cs;
+                }
+                // Release the new VMO; existing one holds the mapping.
+                vmo->Release();
+                own_vmo = false;
+            } else {
                 if (!proc->Map(vmo, va_page, 0, size_pg, vm_flags)) {
                     klog("elf_load: Map failed at ");
                     klog_hex(va_page); klog("\n");
