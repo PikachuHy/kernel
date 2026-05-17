@@ -196,8 +196,8 @@ extern "C" void smp_ap_entry(uint64_t id) {
         klog("AP "); klog_hex(cpu_id); klog(" online\n");
     }
 
-    // Park in idle loop
-    asm volatile("sti");
+    // Park with interrupts disabled.  The scheduler currently only runs
+    // on CPU 0; timer interrupts on APs would corrupt BSP scheduler state.
     while (1) {
         asm volatile("hlt");
     }
