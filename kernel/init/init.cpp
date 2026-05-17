@@ -46,8 +46,9 @@ static int cw(uint32_t h,const void* d,size_t s){
 static int cr(uint32_t h,void* b,size_t s){
     return(int)s6(SYS_CHANNEL_READ,h,(uint64_t)b,s,0,0);
 }
-static void cl(uint32_t h){
-    // Send FileMsg::Close before closing handle so tmpfs exits handle_file
+static void cl(uint32_t h){s6(SYS_HANDLE_CLOSE,h,0,0,0,0);}
+// Close VFS file: send FileMsg::Close so FS server exits handle_file
+static void fcl(uint32_t h){
     FileMsg cm = {FileMsg::Close, 0, 0, 0};
     cw(h, &cm, sizeof(cm));
     s6(SYS_HANDLE_CLOSE,h,0,0,0,0);
@@ -106,7 +107,7 @@ extern "C" void _start(){
         w->op=FileMsg::Write;w->flags=0;w->offset=0;w->length=16;
         const char* g="Hello from init!\n";
         for(int i=0;i<16;i++)wb[24+i]=(uint8_t)g[i];
-        cw(ch,wb,40); FileResponse r; cr(ch,&r,sizeof(r)); cl(ch);
+        cw(ch,wb,40); FileResponse r; cr(ch,&r,sizeof(r)); fcl(ch);
     }
 
     // 6. VFS tmpfs create+read
@@ -128,7 +129,7 @@ extern "C" void _start(){
         FileResponse* rr=(FileResponse*)rb;
         pr("    read size="); ph(rr->size); pr(" data='");
         for(size_t i=0;i<rr->size&&i<13;i++){char c[2]={(char)rb[16+i],0};pr(c);}
-        pr("'\n"); cl(fh);
+        pr("'\n"); fcl(fh);
     }
 
     // 7. VMO create (map deferred — requires valid user VA range)
@@ -161,7 +162,7 @@ extern "C" void _start(){
         FileResponse* rr=(FileResponse*)rb;
         if (rr->size == 8) T_OK("large file multi-page");
         else T_FAIL("large file", "bad read");
-        cl(lfh);
+        fcl(lfh);
     }
 
     // summary
