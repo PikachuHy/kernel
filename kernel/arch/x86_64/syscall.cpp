@@ -73,9 +73,8 @@ uint64_t sys_channel_create(uint64_t, uint64_t, uint64_t, uint64_t) {
 
     Rights full{.mask = Rights::Read | Rights::Write |
                        Rights::Duplicate | Rights::Transfer};
-    handle_t a = proc->handles.Alloc(ch, full);  // endpoint A
-    full.mask |= Rights::ChannelEndpointB;
-    handle_t b = proc->handles.Alloc(ch, full);  // endpoint B
+    handle_t a = proc->handles.Alloc(ch, full);
+    handle_t b = proc->handles.Alloc(ch, full);
     ch->Release(); // handles own refs
 
     return (static_cast<uint64_t>(a) << 32) | b;
@@ -86,11 +85,8 @@ uint64_t sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     if (!proc) return -1;
 
     handle_t h = static_cast<handle_t>(a1);
-    Rights existing;
-    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Write}, &existing);
+    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Write});
     if (!obj || obj->type() != KernelObject::Type::Channel) return -1;
-
-    bool endpoint_b = (existing.mask & Rights::ChannelEndpointB) != 0;
 
     // Args packed in struct (4-register ABI can't pass 5 scalars)
     struct ChannelWriteArgs {
@@ -100,7 +96,7 @@ uint64_t sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     auto* args = reinterpret_cast<const ChannelWriteArgs*>(a2);
 
     return static_cast<Channel*>(obj)->Write(
-        args->data, args->data_len, args->handles, args->num_handles, endpoint_b);
+        args->data, args->data_len, args->handles, args->num_handles);
 }
 
 uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
@@ -108,12 +104,9 @@ uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
     if (!proc) return static_cast<uint64_t>(-1);
 
     handle_t h = static_cast<handle_t>(a1);
-    Rights existing;
-    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read}, &existing);
+    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read});
     if (!obj || obj->type() != KernelObject::Type::Channel)
         return static_cast<uint64_t>(-1);
-
-    bool endpoint_b = (existing.mask & Rights::ChannelEndpointB) != 0;
 
     size_t out_len = 0;
     size_t out_handles = 0;
@@ -123,7 +116,7 @@ uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
     while (true) {
         rc = static_cast<Channel*>(obj)->Read(
             reinterpret_cast<void*>(a2), a3, &out_len,
-            nullptr, 0, &out_handles, endpoint_b);
+            nullptr, 0, &out_handles);
         if (rc != -2) break;  // -2 = empty
         thread_yield();       // give up CPU, wait for message
     }
@@ -136,12 +129,9 @@ uint64_t sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_
     if (!proc) return static_cast<uint64_t>(-1);
 
     handle_t h = static_cast<handle_t>(a1);
-    Rights existing;
-    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read}, &existing);
+    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read});
     if (!obj || obj->type() != KernelObject::Type::Channel)
         return static_cast<uint64_t>(-1);
-
-    bool endpoint_b = (existing.mask & Rights::ChannelEndpointB) != 0;
 
     // Args packed in struct (4-register ABI can't pass 5 scalars)
     struct ChannelReadHandleArgs {
@@ -160,7 +150,7 @@ uint64_t sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_
             reinterpret_cast<void*>(a3), a4, &out_len,
             args ? args->handle_buf : nullptr,
             args ? args->buf_capacity : 0,
-            &out_handles, endpoint_b);
+            &out_handles);
         if (rc != -2) break;
         thread_yield();
     }
@@ -285,8 +275,7 @@ uint64_t sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
 // ── VFS syscalls ──────────────────────────────────────────────────
 
 uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
-    // Declare ALL stack variables up front so the compiler can lay
-    // out the frame before any branches or klog calls.
+    // Stack variables declared up front for predictable frame layout.
     const char* path;
     uint64_t flags;
     MountEntry* mount;
@@ -295,12 +284,9 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     Process* fs_proc;
     Rights full_rights;
     handle_t fs_file_handle;
-    Channel* ack_chan;
-    handle_t fs_ack_handle;
     int rc;
     Process* cur;
     handle_t client_handle;
-    // Read-loop locals
     int rc2;
     size_t out_len;
     FileResponse resp;
@@ -308,8 +294,10 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     path = reinterpret_cast<const char*>(a1);
     flags = a2;
 
+    klog("sys_open: path="); klog(path); klog("\n");
     mount = mount_resolve(path);
-    if (!mount) return INVALID_HANDLE;
+    if (!mount) { klog("sys_open: no mount\n"); return INVALID_HANDLE; }
+    klog("sys_open: mount="); klog(mount->path); klog("\n");
 
     // Compute the relative path after the mount prefix
     prefix = mount->path;
@@ -326,27 +314,11 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     full_rights = Rights{.mask = Rights::Read | Rights::Write |
                                  Rights::Duplicate | Rights::Transfer};
     fs_file_handle = fs_proc->handles.Alloc(file_chan, full_rights);
-    // fs_file_handle = endpoint A (no ChannelEndpointB)
-
-    // Create dedicated ack Channel (no contention with file I/O handler)
-    ack_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
-    if (!ack_chan) {
-        fs_proc->handles.Free(fs_file_handle);
-        file_chan->Release();
-        return INVALID_HANDLE;
-    }
-    new (ack_chan) Channel();
-
-    // Allocate handle in FS server's table for ack_chan, marked as endpoint B.
-    full_rights.mask |= Rights::ChannelEndpointB;
-    fs_ack_handle = fs_proc->handles.Alloc(ack_chan, full_rights);
-    full_rights.mask &= ~Rights::ChannelEndpointB;  // restore for later use
 
     // Build the Open message payload
     struct OpenPayload {
         char     path[256];
         uint32_t file_handle;
-        uint32_t ack_handle;
         uint32_t flags;
     };
     OpenPayload payload;
@@ -357,51 +329,41 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
         payload.path[i] = '\0';
     }
     payload.file_handle = fs_file_handle;
-    payload.ack_handle = fs_ack_handle;
 
     // Send Open request to FS server via the mount Channel
     rc = mount->fs_channel->Write(&payload, sizeof(payload), nullptr, 0);
     if (rc != 0) {
         fs_proc->handles.Free(fs_file_handle);
-        fs_proc->handles.Free(fs_ack_handle);
         file_chan->Release();
-        ack_chan->Release();
         return INVALID_HANDLE;
     }
-    // Blocking read: wait for FS server ack on ack_chan (no contention)
+
+    // Blocking read: wait for FS server response on the file Channel.
     out_len = 0;
     while (true) {
-        rc2 = ack_chan->Read(&resp, sizeof(resp), &out_len, nullptr, 0, nullptr);
+        rc2 = file_chan->Read(&resp, sizeof(resp), &out_len, nullptr, 0, nullptr);
         if (rc2 != -2) break;
         thread_yield();
     }
 
     if (rc2 != 0 || resp.result != 0) {
         fs_proc->handles.Free(fs_file_handle);
-        fs_proc->handles.Free(fs_ack_handle);
         file_chan->Release();
-        ack_chan->Release();
         return INVALID_HANDLE;
     }
 
-    // Allocate a handle for the calling process, marked as endpoint B
+    // Allocate a handle for the calling process
     cur = current_process();
     if (!cur) {
         fs_proc->handles.Free(fs_file_handle);
-        fs_proc->handles.Free(fs_ack_handle);
         file_chan->Release();
-        ack_chan->Release();
         return INVALID_HANDLE;
     }
 
-    full_rights.mask |= Rights::ChannelEndpointB;
     client_handle = cur->handles.Alloc(file_chan, full_rights);
 
     // Release temporary ref from construction; handles own the refs now
     file_chan->Release();
-
-    // ack_chan ref now held only by FS server; it will close after ack
-    ack_chan->Release();
 
     return client_handle;
 }

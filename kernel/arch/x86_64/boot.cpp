@@ -19,14 +19,11 @@
 #include "kernel/arch/x86_64/io.hpp"
 #include "kernel/arch/x86_64/acpi.hpp"
 #include "kernel/arch/x86_64/smp.hpp"
-#include "kernel/arch/x86_64/pci.hpp"
 #include "kernel/core/object/handle_table.hpp"
 #include "kernel/core/object/channel.hpp"
 #include "kernel/core/object/port.hpp"
 #include "kernel/core/object/process.hpp"
 #include "kernel/fs/mount.hpp"
-#include "kernel/core/blk/bufcache.hpp"
-#include "kernel/core/blk/ahci.hpp"
 
 // Placement new (defined in kernel/core/object/port.cpp — re-declared here for boot.cpp's usage)
 void* operator new(size_t, void* p) noexcept;
@@ -89,7 +86,8 @@ __attribute__((unused)) static volatile bool bsp_done = false;
 extern uint8_t _end;
 
 // Timer preemption callback — drives scheduler_tick() from LAPIC timer.
-static bool timer_preempt_callback(uint64_t) {
+
+__attribute__((unused)) static bool timer_preempt_callback(uint64_t) {
     scheduler_tick();
     return true;
 }
@@ -202,26 +200,25 @@ extern "C" void kernel_entry(void) {
         klog("\n");
     }
 
-    // 4. Buddy allocator (must be before paging_init — page table pages)
+    // 3. Higher-half paging takeover
+    // paging_init has a CR3-reload triple-fault bug (debugging in progress).
+    // For now, use Limine's page tables and save them as the kernel template.
+    klog("Using Limine page tables...\n");
+    paging_save_kernel_template();
+
+    // 4. Buddy allocator
     klog("Initializing buddy allocator...\n");
     buddy_init(hhdm, 0);
     klog("  buddy ready\n\n");
-
-    // TSS: must be before paging_init so that #PF/#DF IST stacks are valid
-    // when the first page fault occurs after CR3 switch.
-    klog("Initializing TSS...\n");
-    tss_init();
-
-    // 3. Higher-half paging takeover
-    klog("Initializing kernel page tables...\n");
-    paging_init(hhdm, kernel_phys, kernel_virt, kernel_size);
-    paging_save_kernel_template();
-    klog("  kernel PML4 active\n\n");
 
     // 5. Slab allocator using buddy for slab pages
     klog("Initializing slab allocator...\n");
     slab_init(hhdm);
     klog("  kmalloc ready (16B-2048B)\n\n");
+
+    // TSS: must be after bitmap_init since it allocates kernel interrupt stacks
+    klog("Initializing TSS...\n");
+    tss_init();
 
     // ── kmalloc / new / delete demo ──
     {
@@ -293,42 +290,10 @@ extern "C" void kernel_entry(void) {
     // ── Phase 4: SMP bringup ──
     klog("=== Phase 4: SMP Bringup ===\n\n");
 
-    // Search for ACPI RSDP.  Limine may provide a bogus address with
-    // -device ahci, so always verify the signature before trusting it.
-    const char rsdp_sig[8] = {'R','S','D',' ','P','T','R',' '};
     uint64_t rsdp_phys = 0;
-
-    // 1. Try Limine RSDP response
     if (rsdp_request.response && rsdp_request.response->address) {
-        uint64_t addr = reinterpret_cast<uint64_t>(rsdp_request.response->address);
-        if (addr >= hhdm) addr -= hhdm;
-        // Verify signature
-        uint8_t* p = reinterpret_cast<uint8_t*>(hhdm + addr);
-        bool ok = true;
-        for (int i = 0; i < 8; i++) if (p[i] != (uint8_t)rsdp_sig[i]) ok = false;
-        if (ok) rsdp_phys = addr;
-    }
-
-    // 2. Scan EBDA (first 1KB of segment at BDA 0x40E)
-    if (!rsdp_phys) {
-        uint16_t ebda_seg = *reinterpret_cast<uint16_t*>(hhdm + 0x40E);
-        uint64_t ebda_phys = (uint64_t)ebda_seg << 4;
-        for (uint64_t off = 0; off < 1024; off += 16) {
-            uint8_t* p = reinterpret_cast<uint8_t*>(hhdm + ebda_phys + off);
-            bool ok = true;
-            for (int i = 0; i < 8; i++) if (p[i] != (uint8_t)rsdp_sig[i]) ok = false;
-            if (ok) { rsdp_phys = ebda_phys + off; break; }
-        }
-    }
-
-    // 3. Scan BIOS ROM area (0xE0000–0xFFFFF)
-    if (!rsdp_phys) {
-        for (uint64_t off = 0xE0000; off < 0x100000; off += 16) {
-            uint8_t* p = reinterpret_cast<uint8_t*>(hhdm + off);
-            bool ok = true;
-            for (int i = 0; i < 8; i++) if (p[i] != (uint8_t)rsdp_sig[i]) ok = false;
-            if (ok) { rsdp_phys = off; break; }
-        }
+        uint64_t rsdp_virt = reinterpret_cast<uint64_t>(rsdp_request.response->address);
+        rsdp_phys = rsdp_virt - hhdm;
     }
     smp_init(hhdm, rsdp_phys);
 
@@ -361,21 +326,8 @@ extern "C" void kernel_entry(void) {
     extern void elf_load_fs_servers();
     elf_load_fs_servers();
 
-    // ── Phase 9: Block Layer ──
-    klog("\n=== Phase 9: Block Layer ===\n\n");
-
-    klog("Initializing block buffer cache...\n");
-    bufcache_init();
-
-    klog("Initializing PCI...\n");
-    pci_init();
-    klog("PCI enumeration complete\n\n");
-
-    klog("Initializing AHCI...\n");
-    ahci_init();
-
     // Hook timer to scheduler for preemption (every 10ms)
-    timer_periodic(10000, timer_preempt_callback);
+    // timer_periodic(10000, timer_preempt_callback);  // disabled for debug
 
     // ── Phase 7: VMM + Process + ring-3 ──────────────────────────
     klog("\n=== Phase 7: VMM + Process + ring-3 ===\n\n");

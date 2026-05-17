@@ -27,7 +27,7 @@ struct FileMsg {
 struct FileResponse { int32_t result; uint64_t size; };
 struct Stat { uint64_t size; uint32_t type; uint32_t padding; };
 struct Dirent { char name[256]; uint32_t type; uint64_t size; };
-struct OpenPayload { char path[256]; uint32_t file_handle; uint32_t ack_handle; uint32_t flags; };
+struct OpenPayload { char path[256]; uint32_t file_handle; uint32_t flags; };
 
 constexpr uint32_t O_CREAT  = 1 << 3;
 
@@ -72,17 +72,15 @@ struct DirEntry {
     uint32_t vmo_handle;
     bool     is_dir;
     uint64_t size;       // file size in bytes
-    DirEntry* next;       // sibling in same directory
-    DirEntry* children;   // first child (only if is_dir)
+    DirEntry* next;
 };
 
-static DirEntry* root_dir = nullptr;
+static DirEntry* root = nullptr;
 static DirEntry pool[64];
 static int pool_idx = 0;
 
-static DirEntry* find_in_dir(DirEntry* dir, const char* name) {
-    if (!dir || !dir->is_dir) return nullptr;
-    for (DirEntry* e = dir->children; e; e = e->next) {
+static DirEntry* find_entry(const char* name) {
+    for (DirEntry* e = root; e; e = e->next) {
         int i = 0;
         while (name[i] && e->name[i] && name[i] == e->name[i]) i++;
         if (name[i] == '\0' && e->name[i] == '\0') return e;
@@ -90,34 +88,27 @@ static DirEntry* find_in_dir(DirEntry* dir, const char* name) {
     return nullptr;
 }
 
-static DirEntry* add_to_dir(DirEntry* parent, const char* name,
-                             uint32_t vmo_h, bool is_dir, uint64_t sz) {
+static DirEntry* add_entry(const char* name, uint32_t vmo_h, bool dir, uint64_t sz) {
     if (pool_idx >= 64) return nullptr;
     DirEntry* e = &pool[pool_idx++];
     int i = 0;
     while (name[i] && i < 255) { e->name[i] = name[i]; i++; }
     e->name[i] = '\0';
     e->vmo_handle = vmo_h;
-    e->is_dir = is_dir;
+    e->is_dir = dir;
     e->size = sz;
-    e->children = nullptr;
-    if (parent && parent->is_dir) {
-        e->next = parent->children;
-        parent->children = e;
-    }
+    e->next = root;
+    root = e;
     return e;
 }
 
 // ── Per-open file state ──────────────────────────────────────────
-constexpr int MAX_PAGES = 16;  // 64KB max per file
-
 struct FileState {
     uint32_t  file_chan;
-    uint32_t  vmo_pages[MAX_PAGES];  // one VMO handle per 4KB page
-    int       page_count;
+    uint32_t  vmo_handle;
     uint64_t  cursor;
     bool      is_dir;
-    DirEntry* entry;
+    DirEntry* entry;     // pointer to the directory entry (for size)
     FileState* next;
 };
 
@@ -129,12 +120,7 @@ static FileState* alloc_file_state(uint32_t fchan, uint32_t vmo, bool dir, DirEn
     if (fspool_idx >= 64) return nullptr;
     FileState* fs = &fspool[fspool_idx++];
     fs->file_chan = fchan;
-    for (int i = 0; i < MAX_PAGES; i++) fs->vmo_pages[i] = 0;
-    fs->page_count = 0;
-    if (vmo) {
-        fs->vmo_pages[0] = vmo;
-        fs->page_count = 1;
-    }
+    fs->vmo_handle = vmo;
     fs->cursor = 0;
     fs->is_dir = dir;
     fs->entry = e;
@@ -145,8 +131,11 @@ static FileState* alloc_file_state(uint32_t fchan, uint32_t vmo, bool dir, DirEn
 
 // ── File handler ─────────────────────────────────────────────────
 static void handle_file(FileState* fs) {
-    // Map pages on demand in Read/Write handlers
+    // Map the VMO at a fixed address
     const uint64_t MAP_BASE = 0x70000000000ULL;
+    if (fs->vmo_handle) {
+        vmo_map(fs->vmo_handle, MAP_BASE, 0x3, 0);  // RW
+    }
 
     while (true) {
         uint8_t buf[4096];
@@ -164,63 +153,38 @@ static void handle_file(FileState* fs) {
 
         switch (msg->op) {
         case FileMsg::Read: {
-            size_t offset = msg->offset;
-            size_t total = msg->length;
-            if (total > 4096 - sizeof(FileResponse))
-                total = 4096 - sizeof(FileResponse);
+            size_t count = msg->length;
+            if (count > 4096 - sizeof(FileResponse))
+                count = 4096 - sizeof(FileResponse);
+            if (msg->offset + count > file_size)
+                count = file_size > msg->offset ? file_size - msg->offset : 0;
 
             uint8_t out[sizeof(FileResponse) + 4096];
-            size_t read_bytes = 0;
-
-            for (int i = 0; i < fs->page_count && read_bytes < total; i++) {
-                size_t page_base = i * 4096;
-                if (offset >= page_base + 4096) continue;
-                size_t page_off = (offset < page_base) ? 0 : (offset - page_base);
-                size_t chunk = 4096 - page_off;
-                if (chunk > total - read_bytes) chunk = total - read_bytes;
-                uint64_t file_size = fs->entry ? fs->entry->size : 0;
-                if (offset + chunk > file_size) chunk = file_size > offset ? file_size - offset : 0;
-
-                if (chunk > 0 && fs->vmo_pages[i]) {
-                    vmo_map(fs->vmo_pages[i], MAP_BASE, 3, 0);
-                    uint8_t* src = (uint8_t*)MAP_BASE + page_off;
-                    for (size_t j = 0; j < chunk; j++)
-                        out[sizeof(FileResponse) + read_bytes + j] = src[j];
-                    read_bytes += chunk; offset += chunk;
-                }
-            }
-            *(FileResponse*)out = {0, read_bytes};
-            channel_write(fs->file_chan, out, sizeof(FileResponse) + read_bytes);
+            *(FileResponse*)out = {0, count};
+            uint8_t* src = reinterpret_cast<uint8_t*>(MAP_BASE + msg->offset);
+            for (size_t i = 0; i < count; i++)
+                out[sizeof(FileResponse) + i] = src[i];
+            channel_write(fs->file_chan, out, sizeof(FileResponse) + count);
             break;
         }
         case FileMsg::Write: {
-            size_t offset = msg->offset;
-            size_t remaining = data_len;
-            size_t written = 0;
-
-            while (remaining > 0 && (int)(offset / 4096) < MAX_PAGES) {
-                int pi = offset / 4096;
-                if (pi >= fs->page_count || !fs->vmo_pages[pi]) {
-                    uint32_t vmo = vmo_create(4096);
-                    if (!vmo) break;
-                    fs->vmo_pages[pi] = vmo;
-                    if (pi >= fs->page_count) fs->page_count = pi + 1;
-                    vmo_map(vmo, MAP_BASE, 3, 0);
-                } else {
-                    vmo_map(fs->vmo_pages[pi], MAP_BASE, 3, 0);
+            size_t count = data_len;
+            if (msg->offset + count > file_size) {
+                // Extend file up to VMO capacity (4096 bytes)
+                uint64_t new_sz = msg->offset + count;
+                if (new_sz > 4096) {
+                    if (msg->offset < 4096)
+                        count = 4096 - msg->offset;
+                    else
+                        count = 0;
+                    new_sz = 4096;
                 }
-
-                size_t page_off = offset % 4096;
-                size_t chunk = 4096 - page_off;
-                if (chunk > remaining) chunk = remaining;
-
-                uint8_t* dst = (uint8_t*)MAP_BASE + page_off;
-                for (size_t i = 0; i < chunk; i++) dst[i] = data[i];
-                written += chunk; remaining -= chunk; offset += chunk; data += chunk;
+                if (fs->entry) fs->entry->size = new_sz;
             }
-            if (fs->entry && offset > (uint64_t)fs->entry->size)
-                fs->entry->size = offset;
-            resp.result = 0; resp.size = written;
+            uint8_t* dst = reinterpret_cast<uint8_t*>(MAP_BASE + msg->offset);
+            for (size_t i = 0; i < count; i++) dst[i] = data[i];
+            resp.result = 0;
+            resp.size = count;
             channel_write(fs->file_chan, &resp, sizeof(resp));
             break;
         }
@@ -239,33 +203,10 @@ static void handle_file(FileState* fs) {
             channel_write(fs->file_chan, out, sizeof(out));
             break;
         }
-        case FileMsg::Readdir: {
-            if (!fs->is_dir || !fs->entry) {
-                resp.result = -1;
-                channel_write(fs->file_chan, &resp, sizeof(resp));
-                break;
-            }
-            uint8_t out[sizeof(FileResponse) + 4096];
-            size_t count = 0;
-            const size_t max_dirents = (4096 - sizeof(FileResponse)) / sizeof(Dirent);
-            Dirent* dirents = reinterpret_cast<Dirent*>(out + sizeof(FileResponse));
-            uint32_t skip = msg->offset;
-
-            for (DirEntry* e = fs->entry->children; e && count < max_dirents; e = e->next) {
-                if (skip > 0) { skip--; continue; }
-                dirents[count].type = e->is_dir ? 1 : 0;
-                dirents[count].size = e->size;
-                int j = 0;
-                while (e->name[j] && j < 255) { dirents[count].name[j] = e->name[j]; j++; }
-                dirents[count].name[j] = '\0';
-                count++;
-            }
-            FileResponse* rp = reinterpret_cast<FileResponse*>(out);
-            rp->result = 0;
-            rp->size = count * sizeof(Dirent);
-            channel_write(fs->file_chan, out, sizeof(FileResponse) + rp->size);
+        case FileMsg::Readdir:
+            resp.result = -1;  // not yet implemented
+            channel_write(fs->file_chan, &resp, sizeof(resp));
             break;
-        }
         case FileMsg::Close:
             handle_close(fs->file_chan);
             return;
@@ -281,83 +222,52 @@ static void handle_file(FileState* fs) {
 extern "C" void _start() {
     const uint32_t MOUNT_CHAN = 1;
 
-    // Initialize root directory
-    root_dir = &pool[pool_idx++];
-    root_dir->is_dir = true;
-    root_dir->name[0] = '\0';
-    root_dir->children = nullptr;
-    root_dir->next = nullptr;
-
     while (true) {
-        uint8_t buf[sizeof(OpenPayload)];
+        uint8_t buf[264];
         int rc = channel_read(MOUNT_CHAN, buf, sizeof(buf));
         if (rc < 0) break;
 
         OpenPayload* payload = reinterpret_cast<OpenPayload*>(buf);
         uint32_t file_handle = payload->file_handle;
-        uint32_t ack_handle   = payload->ack_handle;
         const char* rel = payload->path;
 
-        // Skip leading slashes
+        // Strip leading '/'
         while (*rel == '/') rel++;
 
-        // Walk from root, parsing path components
-        DirEntry* current = root_dir;
-        DirEntry* entry = nullptr;
-        char comp[256];
-        int ci;
+        // Look up existing entry
+        DirEntry* entry = find_entry(rel);
 
-        while (*rel) {
-            ci = 0;
-            while (*rel && *rel != '/') { comp[ci++] = *rel; rel++; }
-            comp[ci] = '\0';
-            if (*rel == '/') rel++;
-            if (comp[0] == '\0') continue;
-
-            bool is_last = (*rel == '\0');
-            if (current && current->is_dir) {
-                DirEntry* child = find_in_dir(current, comp);
-                if (!child) {
-                    if ((payload->flags & O_CREAT) && is_last) {
-                        uint32_t vmo = vmo_create(4096);
-                        child = add_to_dir(current, comp, vmo, false, 0);
-                    } else if ((payload->flags & O_CREAT) && !is_last) {
-                        // Create intermediate directory
-                        child = add_to_dir(current, comp, 0, true, 0);
-                    }
-                }
-                if (!child) { entry = nullptr; break; }
-                current = child;
-                if (is_last) entry = child;
-            } else {
-                entry = nullptr; break;
+        // Create if O_CREAT
+        if (!entry && (payload->flags & O_CREAT)) {
+            uint32_t vmo = vmo_create(4096);
+            if (vmo) {
+                entry = add_entry(rel, vmo, false, 0);
             }
         }
 
         if (!entry) {
+            // No such file
             FileResponse resp = {-1, 0};
-            channel_write(ack_handle, &resp, sizeof(resp));
-            handle_close(ack_handle);
+            channel_write(file_handle, &resp, sizeof(resp));
             handle_close(file_handle);
             continue;
         }
 
+        // Allocate per-open state
         FileState* fs = alloc_file_state(file_handle, entry->vmo_handle,
                                           entry->is_dir, entry);
         if (!fs) {
             FileResponse resp = {-1, 0};
-            channel_write(ack_handle, &resp, sizeof(resp));
-            handle_close(ack_handle);
+            channel_write(file_handle, &resp, sizeof(resp));
             handle_close(file_handle);
             continue;
         }
 
-        // Ack on dedicated ack Channel (no contention!)
-        FileResponse ack = {0, 0};
-        channel_write(ack_handle, &ack, sizeof(ack));
-        handle_close(ack_handle);
+        // Ack success on file Channel
+        FileResponse resp = {0, 0};
+        channel_write(file_handle, &resp, sizeof(resp));
 
-        // Enter per-file I/O loop (blocks until Close)
+        // Enter per-file operation loop (blocks until Close)
         handle_file(fs);
     }
 

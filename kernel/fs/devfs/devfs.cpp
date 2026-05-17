@@ -11,6 +11,7 @@ using uint8_t  = unsigned char;
 using size_t = decltype(sizeof(0));
 
 // -- Syscall numbers ----------------------------------------------------------
+constexpr int SYS_DEBUG_PRINT          = 0;
 constexpr int SYS_CHANNEL_WRITE        = 11;
 constexpr int SYS_CHANNEL_READ         = 12;
 constexpr int SYS_HANDLE_CLOSE         = 1;
@@ -39,7 +40,6 @@ struct Stat {
 struct OpenPayload {
     char     path[256];
     uint32_t file_handle;
-    uint32_t ack_handle;
     uint32_t flags;
 };
 
@@ -61,6 +61,10 @@ static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
         : "rax", "rdi", "rsi", "rdx", "r10", "r8", "rcx", "r11", "memory"
     );
     return ret;
+}
+
+static void debug(const char* msg) {
+    syscall6(SYS_DEBUG_PRINT, (uint64_t)msg, 0, 0, 0, 0);
 }
 
 static int channel_write(uint32_t h, const void* data, size_t len) {
@@ -173,11 +177,17 @@ static void handle_console(uint32_t file_chan) {
 
         if ((size_t)rc < sizeof(FileMsg)) continue;
         FileMsg* msg = reinterpret_cast<FileMsg*>(buf);
+        uint8_t* data = buf + sizeof(FileMsg);
+        size_t data_len = (size_t)rc - sizeof(FileMsg);
 
         FileResponse resp = {};
         switch (msg->op) {
         case FileMsg::Write:
-            // Discard write data (console is write-only, no echo)
+            // Print write data via debug_print
+            for (size_t i = 0; i < data_len && i < msg->length; i++) {
+                char c[2] = { (char)data[i], '\0' };
+                debug(c);
+            }
             resp.result = 0;
             resp.size = msg->length;
             channel_write(file_chan, &resp, sizeof(resp));
@@ -210,13 +220,12 @@ extern "C" void _start() {
     const uint32_t MOUNT_CHAN = 1;
 
     while (true) {
-        uint8_t buf[sizeof(OpenPayload)];
+        uint8_t buf[264];
         int rc = channel_read(MOUNT_CHAN, buf, sizeof(buf));
         if (rc < 0) break;
 
         OpenPayload* payload = reinterpret_cast<OpenPayload*>(buf);
         uint32_t file_handle = payload->file_handle;
-        uint32_t ack_handle   = payload->ack_handle;
         const char* rel = payload->path;
 
         // Strip leading "/dev/" prefix if present
@@ -224,12 +233,11 @@ extern "C" void _start() {
             rel[3] == 'v' && rel[4] == '/')
             rel += 5;
 
-        // Write ack on dedicated ack Channel (no contention)
-        FileResponse ack = {0, 0};
-        channel_write(ack_handle, &ack, sizeof(ack));
-        handle_close(ack_handle);
+        // Ack on file Channel before dispatching to handler
+        FileResponse resp = {0, 0};
+        channel_write(file_handle, &resp, sizeof(resp));
 
-        // Dispatch to device handler (enters per-file I/O loop)
+        // Dispatch to device handler
         if (rel[0] == 'n' && rel[1] == 'u' && rel[2] == 'l' &&
             rel[3] == 'l' && rel[4] == '\0') {
             handle_null(file_handle);
@@ -241,6 +249,7 @@ extern "C" void _start() {
                    rel[6] == 'e' && rel[7] == '\0') {
             handle_console(file_handle);
         } else {
+            // Unknown device: send error and close
             FileResponse err = {-1, 0};
             channel_write(file_handle, &err, sizeof(err));
             handle_close(file_handle);
