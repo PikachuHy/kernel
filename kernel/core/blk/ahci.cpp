@@ -281,7 +281,7 @@ static int ahci_port_identify(AhciPort* port, char* model_out,
         klog_dec(port->port_num);
         uint32_t serr = ahci_read32(mmio, PXSERR);
         if (serr) {
-            klog(" SERR=0x"); klog_hex(serr);
+            klog(" SERR="); klog_hex(serr);
             ahci_write32(mmio, PXSERR, serr);
         }
         klog("\n");
@@ -383,7 +383,7 @@ static int ahci_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) {
             uint32_t serr = ahci_read32(mmio, PXSERR);
             if (serr) {
                 klog("AHCI: rd err port "); klog_dec(port->port_num);
-                klog(" SERR=0x"); klog_hex(serr); klog("\n");
+                klog(" SERR="); klog_hex(serr); klog("\n");
                 ahci_write32(mmio, PXSERR, serr);
             }
             buddy_free_pages(dma_phys, 0);
@@ -462,7 +462,7 @@ static int ahci_write(BlockDevice* dev, uint64_t lba, const void* buf,
             uint32_t serr = ahci_read32(mmio, PXSERR);
             if (serr) {
                 klog("AHCI: wr err port "); klog_dec(port->port_num);
-                klog(" SERR=0x"); klog_hex(serr); klog("\n");
+                klog(" SERR="); klog_hex(serr); klog("\n");
                 ahci_write32(mmio, PXSERR, serr);
             }
             buddy_free_pages(dma_phys, 0);
@@ -489,16 +489,16 @@ void ahci_init() {
     klog("AHCI: found at PCI ");
     klog_hex(pci->bus); klog(":"); klog_hex(pci->dev);
     klog("."); klog_hex(pci->func); klog("\n");
-    klog("  vendor=0x"); klog_hex(pci->vendor_id);
-    klog(" device=0x"); klog_hex(pci->device_id);
-    klog(" BAR5=0x"); klog_hex(pci->bar[5]); klog("\n");
+    klog("  vendor="); klog_hex(pci->vendor_id);
+    klog(" device="); klog_hex(pci->device_id);
+    klog(" BAR5="); klog_hex(pci->bar[5]); klog("\n");
 
     // BAR5 = ABAR (AHCI Base Address Register).  Mask off lower 4 bits.
     uint64_t abar_phys = pci->bar[5] & ~0xFULL;
     uint8_t* abar = static_cast<uint8_t*>(phys_to_virt(abar_phys));
 
-    klog("  ABAR phys=0x"); klog_hex(abar_phys);
-    klog(" virt=0x"); klog_hex(reinterpret_cast<uint64_t>(abar));
+    klog("  ABAR phys="); klog_hex(abar_phys);
+    klog(" virt="); klog_hex(reinterpret_cast<uint64_t>(abar));
     klog("\n");
 
     // Reset HBA.
@@ -515,7 +515,7 @@ void ahci_init() {
 
     // Read Ports Implemented bitmap.
     uint32_t ports_impl = ahci_read32(abar, PI);
-    klog("  ports implemented: 0x"); klog_hex(ports_impl); klog("\n");
+    klog("  ports implemented: "); klog_hex(ports_impl); klog("\n");
 
     int dev_index = 0;
     for (int port_num = 0; port_num < 32; port_num++) {
@@ -525,7 +525,7 @@ void ahci_init() {
         uint32_t ssts = ahci_read32(pm, PXSSTS);
 
         klog("  port "); klog_dec(port_num);
-        klog(": SSTS=0x"); klog_hex(ssts); klog("\n");
+        klog(": SSTS="); klog_hex(ssts); klog("\n");
 
         // DET field (bits 0-3): 3 = device present and phy established.
         uint32_t det = ssts & 0x0F;
@@ -557,7 +557,7 @@ void ahci_init() {
         }
 
         uint32_t sig = ahci_read32(pm, PXSIG);
-        klog("    SIG=0x"); klog_hex(sig); klog("\n");
+        klog("    SIG="); klog_hex(sig); klog("\n");
 
         // Signature 0x00000101 = ATA.  ATAPI and PM have different sigs.
         if (sig != 0x00000101) {
