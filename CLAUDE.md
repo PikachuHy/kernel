@@ -31,6 +31,7 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 | 6: Object Manager + IPC | `docs/superpowers/plans/2026-05-05-phase-6-object-ipc.md` | Done |
 | 7: VMM + Process | `docs/superpowers/plans/2026-05-10-phase-7-vmm-process.md` | Done (incl. 3 fixes) |
 | 8: VFS | `docs/superpowers/plans/2026-05-16-phase-8-vfs.md` | Done (incl. syscall per-thread stack fix) |
+| 9: Block Layer | `docs/superpowers/plans/2026-05-17-phase-9-block-layer.md` | Done |
 | Fix Known Issues | `docs/superpowers/plans/2026-05-05-fix-known-issues.md` | Done (TSS+buddy; paging deferred) |
 
 ## Build / Test / Lint
