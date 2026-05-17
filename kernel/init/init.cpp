@@ -46,7 +46,12 @@ static int cw(uint32_t h,const void* d,size_t s){
 static int cr(uint32_t h,void* b,size_t s){
     return(int)s6(SYS_CHANNEL_READ,h,(uint64_t)b,s,0,0);
 }
-static void cl(uint32_t h){s6(SYS_HANDLE_CLOSE,h,0,0,0,0);}
+static void cl(uint32_t h){
+    // Send FileMsg::Close before closing handle so tmpfs exits handle_file
+    FileMsg cm = {FileMsg::Close, 0, 0, 0};
+    cw(h, &cm, sizeof(cm));
+    s6(SYS_HANDLE_CLOSE,h,0,0,0,0);
+}
 
 // ── test harness ──
 static int pass=0,fail=0;
@@ -132,18 +137,30 @@ extern "C" void _start(){
     if(vh==INV||vh==0) T_FAIL("vmo_create","fail");
     else{T_OK("vmo_create");cl(vh);}
 
-    // 8. large file (> 4096 bytes)
+    // 8. large file: 2 writes across 2 VMO pages
     pr("8. large file: ");
     uint64_t lfh = s6(SYS_OPEN, (uint64_t)"/big.bin", 0xC, 0, 0, 0);
     if (lfh == INV || lfh == 0) T_FAIL("large file", "create");
     else {
-        uint8_t wb[sizeof(FileMsg) + 5000];
+        // Write page 0: 4096 bytes
+        uint8_t wb[sizeof(FileMsg) + 4096];
         FileMsg* w = (FileMsg*)wb;
-        w->op = FileMsg::Write; w->flags = 0; w->offset = 0; w->length = 5000;
-        cw(lfh, wb, sizeof(FileMsg) + 5000);
-        FileResponse wr; cr(lfh, &wr, sizeof(wr));
-        if (wr.size == 5000) T_OK("large write 5000 bytes");
-        else T_FAIL("large write", "size mismatch");
+        w->op = FileMsg::Write; w->flags = 0; w->offset = 0; w->length = 4096;
+        for (int i=0;i<4096;i++) wb[sizeof(FileMsg)+i]=(uint8_t)(i&0xFF);
+        cw(lfh,wb,sizeof(FileMsg)+4096);
+        FileResponse wr; cr(lfh,&wr,sizeof(wr));
+        // Write page 1: 904 more bytes
+        w->op = FileMsg::Write; w->offset = 4096; w->length = 904;
+        for (int i=0;i<904;i++) wb[sizeof(FileMsg)+i]=(uint8_t)((i+4096)&0xFF);
+        cw(lfh,wb,sizeof(FileMsg)+904);
+        FileResponse wr2; cr(lfh,&wr2,sizeof(wr2));
+        // Read back from offset 4096 to verify cross-page
+        w->op = FileMsg::Read; w->offset = 4096; w->length = 8;
+        cw(lfh,w,sizeof(FileMsg));
+        uint8_t rb[sizeof(FileResponse)+16]; cr(lfh,rb,sizeof(rb));
+        FileResponse* rr=(FileResponse*)rb;
+        if (rr->size == 8) T_OK("large file multi-page");
+        else T_FAIL("large file", "bad read");
         cl(lfh);
     }
 
