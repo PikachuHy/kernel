@@ -336,7 +336,7 @@ extern "C" void _start() {
 
         if (!entry) {
             FileResponse resp = {-1, 0};
-            channel_write(file_handle, &resp, sizeof(resp));
+            channel_write(ack_handle, &resp, sizeof(resp));
             handle_close(ack_handle);
             handle_close(file_handle);
             continue;
@@ -346,7 +346,7 @@ extern "C" void _start() {
                                           entry->is_dir, entry);
         if (!fs) {
             FileResponse resp = {-1, 0};
-            channel_write(file_handle, &resp, sizeof(resp));
+            channel_write(ack_handle, &resp, sizeof(resp));
             handle_close(ack_handle);
             handle_close(file_handle);
             continue;

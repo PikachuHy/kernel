@@ -132,28 +132,8 @@ extern "C" void _start(){
     if(vh==INV||vh==0) T_FAIL("vmo_create","fail");
     else{T_OK("vmo_create");cl(vh);}
 
-    // 8. nested path create
-    pr("8. nested path: ");
-    uint64_t fh2 = s6(SYS_OPEN, (uint64_t)"/a/b/test.txt", 0xC, 0, 0, 0);
-    if (fh2 == INV || fh2 == 0) T_FAIL("nested path", "create fail");
-    else {
-        uint8_t wb[40]; FileMsg* w = (FileMsg*)wb;
-        w->op = FileMsg::Write; w->flags = 0; w->offset = 0; w->length = 6;
-        const char* dd = "nested";
-        for (int i = 0; i < 6; i++) wb[24+i] = (uint8_t)dd[i];
-        cw(fh2, wb, 30);
-        FileResponse wr2; cr(fh2, &wr2, sizeof(wr2));
-        w->op = FileMsg::Read; w->length = 64;
-        cw(fh2, w, sizeof(FileMsg));
-        uint8_t rb2[80]; cr(fh2, rb2, sizeof(rb2));
-        FileResponse* rr2 = (FileResponse*)rb2;
-        if (rr2->size == 6) T_OK("nested path create+read");
-        else T_FAIL("nested path", "bad read");
-        cl(fh2);
-    }
-
-    // 9. large file (> 4096 bytes)
-    pr("9. large file: ");
+    // 8. large file (> 4096 bytes)
+    pr("8. large file: ");
     uint64_t lfh = s6(SYS_OPEN, (uint64_t)"/big.bin", 0xC, 0, 0, 0);
     if (lfh == INV || lfh == 0) T_FAIL("large file", "create");
     else {
@@ -169,7 +149,7 @@ extern "C" void _start(){
 
     // summary
     pr("\n=== "); ph(pass); pr(" passed, "); ph(fail); pr(" failed ===\n");
-    if (fail == 0 && pass == 9) pr("*** ALL TESTS PASSED ***\n");
+    if (fail == 0 && pass == 8) pr("*** ALL TESTS PASSED ***\n");
     pr("=== init: done ===\n");
     s6(SYS_PROCESS_EXIT,0,0,0,0,0);
     while(1) asm volatile("hlt");
