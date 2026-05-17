@@ -11,6 +11,7 @@
 #include "kernel/core/mm/vmo.hpp"          // Vmo
 #include "kernel/fs/protocol.hpp"          // FileResponse
 #include "kernel/fs/mount.hpp"             // MountEntry, mount_resolve, mount_add
+#include "kernel/core/blk/blkdev.hpp"      // BlockDevice, blkdev_find, blkdev_read, blkdev_write
 
 // Placement new for constructing objects in pre-allocated memory
 inline void* operator new(size_t, void* p) noexcept { return p; }
@@ -73,8 +74,9 @@ uint64_t sys_channel_create(uint64_t, uint64_t, uint64_t, uint64_t) {
 
     Rights full{.mask = Rights::Read | Rights::Write |
                        Rights::Duplicate | Rights::Transfer};
-    handle_t a = proc->handles.Alloc(ch, full);
-    handle_t b = proc->handles.Alloc(ch, full);
+    handle_t a = proc->handles.Alloc(ch, full);  // endpoint A
+    full.mask |= Rights::ChannelEndpointB;
+    handle_t b = proc->handles.Alloc(ch, full);  // endpoint B
     ch->Release(); // handles own refs
 
     return (static_cast<uint64_t>(a) << 32) | b;
@@ -85,8 +87,11 @@ uint64_t sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     if (!proc) return -1;
 
     handle_t h = static_cast<handle_t>(a1);
-    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Write});
+    Rights existing;
+    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Write}, &existing);
     if (!obj || obj->type() != KernelObject::Type::Channel) return -1;
+
+    bool endpoint_b = (existing.mask & Rights::ChannelEndpointB) != 0;
 
     // Args packed in struct (4-register ABI can't pass 5 scalars)
     struct ChannelWriteArgs {
@@ -96,7 +101,7 @@ uint64_t sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     auto* args = reinterpret_cast<const ChannelWriteArgs*>(a2);
 
     return static_cast<Channel*>(obj)->Write(
-        args->data, args->data_len, args->handles, args->num_handles);
+        args->data, args->data_len, args->handles, args->num_handles, endpoint_b);
 }
 
 uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
@@ -104,9 +109,12 @@ uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
     if (!proc) return static_cast<uint64_t>(-1);
 
     handle_t h = static_cast<handle_t>(a1);
-    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read});
+    Rights existing;
+    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read}, &existing);
     if (!obj || obj->type() != KernelObject::Type::Channel)
         return static_cast<uint64_t>(-1);
+
+    bool endpoint_b = (existing.mask & Rights::ChannelEndpointB) != 0;
 
     size_t out_len = 0;
     size_t out_handles = 0;
@@ -116,7 +124,7 @@ uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
     while (true) {
         rc = static_cast<Channel*>(obj)->Read(
             reinterpret_cast<void*>(a2), a3, &out_len,
-            nullptr, 0, &out_handles);
+            nullptr, 0, &out_handles, endpoint_b);
         if (rc != -2) break;  // -2 = empty
         thread_yield();       // give up CPU, wait for message
     }
@@ -129,9 +137,12 @@ uint64_t sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_
     if (!proc) return static_cast<uint64_t>(-1);
 
     handle_t h = static_cast<handle_t>(a1);
-    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read});
+    Rights existing;
+    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read}, &existing);
     if (!obj || obj->type() != KernelObject::Type::Channel)
         return static_cast<uint64_t>(-1);
+
+    bool endpoint_b = (existing.mask & Rights::ChannelEndpointB) != 0;
 
     // Args packed in struct (4-register ABI can't pass 5 scalars)
     struct ChannelReadHandleArgs {
@@ -150,7 +161,7 @@ uint64_t sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_
             reinterpret_cast<void*>(a3), a4, &out_len,
             args ? args->handle_buf : nullptr,
             args ? args->buf_capacity : 0,
-            &out_handles);
+            &out_handles, endpoint_b);
         if (rc != -2) break;
         thread_yield();
     }
@@ -282,7 +293,6 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     const char* prefix;
     Channel* file_chan;
     Process* fs_proc;
-    Rights full_rights;
     handle_t fs_file_handle;
     int rc;
     Process* cur;
@@ -310,10 +320,13 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     new (file_chan) Channel();
 
     // Allocate a handle for the file Channel in the FS server's handle table.
+    // The FS server is endpoint B — set ChannelEndpointB so its reads/writes
+    // go to the correct queue.
     fs_proc = mount->fs_process;
-    full_rights = Rights{.mask = Rights::Read | Rights::Write |
-                                 Rights::Duplicate | Rights::Transfer};
-    fs_file_handle = fs_proc->handles.Alloc(file_chan, full_rights);
+    Rights fs_rights{.mask = Rights::Read | Rights::Write |
+                             Rights::Duplicate | Rights::Transfer |
+                             Rights::ChannelEndpointB};
+    fs_file_handle = fs_proc->handles.Alloc(file_chan, fs_rights);
 
     // Build the Open message payload
     struct OpenPayload {
@@ -360,7 +373,10 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
         return INVALID_HANDLE;
     }
 
-    client_handle = cur->handles.Alloc(file_chan, full_rights);
+    // Client is endpoint A — no ChannelEndpointB
+    Rights client_rights{.mask = Rights::Read | Rights::Write |
+                                 Rights::Duplicate | Rights::Transfer};
+    client_handle = cur->handles.Alloc(file_chan, client_rights);
 
     // Release temporary ref from construction; handles own the refs now
     file_chan->Release();
@@ -387,11 +403,39 @@ uint64_t sys_mount(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     return static_cast<uint64_t>(mount_add(path, ch, fs_proc));
 }
 
+// ── Block device syscalls ──────────────────────────────────────────
+
+uint64_t sys_blkdev_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
+    const char* name = reinterpret_cast<const char*>(a1);
+    uint64_t lba = a2;
+    void* buf = reinterpret_cast<void*>(a3);
+    size_t count = static_cast<size_t>(a4);
+
+    BlockDevice* dev = blkdev_find(name);
+    if (!dev) return static_cast<uint64_t>(-1);
+
+    int rc = blkdev_read(dev, lba, buf, count);
+    return static_cast<uint64_t>(rc);
+}
+
+uint64_t sys_blkdev_write(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
+    const char* name = reinterpret_cast<const char*>(a1);
+    uint64_t lba = a2;
+    const void* buf = reinterpret_cast<const void*>(a3);
+    size_t count = static_cast<size_t>(a4);
+
+    BlockDevice* dev = blkdev_find(name);
+    if (!dev) return static_cast<uint64_t>(-1);
+
+    int rc = blkdev_write(dev, lba, buf, count);
+    return static_cast<uint64_t>(rc);
+}
+
 // ── Dispatch table ───────────────────────────────────────────────
 
 using syscall_fn_t = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t);
 
-constexpr int MAX_SYSCALL = 52;
+constexpr int MAX_SYSCALL = 54;
 syscall_fn_t g_syscall_table[MAX_SYSCALL];
 
 void init_syscall_table() {
@@ -412,6 +456,8 @@ void init_syscall_table() {
     g_syscall_table[SYSCALL_VMO_MAP]        = sys_vmo_map;
     g_syscall_table[SYSCALL_OPEN]           = sys_open;
     g_syscall_table[SYSCALL_MOUNT]          = sys_mount;
+    g_syscall_table[SYSCALL_BLKDEV_READ]    = sys_blkdev_read;
+    g_syscall_table[SYSCALL_BLKDEV_WRITE]   = sys_blkdev_write;
 }
 
 extern "C" uint64_t syscall_dispatcher(uint64_t num, uint64_t a1, uint64_t a2,

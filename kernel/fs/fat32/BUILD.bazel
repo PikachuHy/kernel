@@ -1,0 +1,35 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+genrule(
+    name = "fat32_elf",
+    srcs = ["fat32.cpp", "fat32.ld"],
+    outs = ["fat32.elf"],
+    cmd = "/usr/bin/clang++ " +
+          "-target x86_64-unknown-elf " +
+          "-ffreestanding -nostdlib " +
+          "-std=c++26 " +
+          "-fno-exceptions -fno-rtti " +
+          "-Wall -Wextra -Werror " +
+          "-O2 " +
+          "-mno-sse -mno-sse2 -mgeneral-regs-only " +
+          "-mcmodel=small " +
+          "-T $(location fat32.ld) " +
+          "-o $@ " +
+          "$(location fat32.cpp) " +
+          "-Wl,-z,max-page-size=0x1000 " +
+          "-static " +
+          "--ld-path=/usr/local/bin/lld-wrapper.sh",
+    visibility = ["//visibility:private"],
+)
+
+genrule(
+    name = "fat32_embed",
+    srcs = [":fat32.elf"],
+    outs = ["fat32_embed.o"],
+    cmd = "cp $(SRCS) $(@D)/fat32.bin && " +
+          "cd $(@D) && " +
+          "/usr/local/opt/llvm/bin/llvm-objcopy " +
+          "-I binary -O elf64-x86-64 -B i386:x86-64 " +
+          "fat32.bin $$PWD/fat32_embed.o",
+    visibility = ["//visibility:public"],
+)

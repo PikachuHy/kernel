@@ -9,6 +9,7 @@ cc_binary(
         "//kernel/init:init_embed",
         "//kernel/fs/devfs:devfs_embed",
         "//kernel/fs/tmpfs:tmpfs_embed",
+        "//kernel/fs/fat32:fat32_embed",
     ],
     deps = [
         "//kernel/arch/x86_64:arch",

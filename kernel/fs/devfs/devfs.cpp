@@ -16,6 +16,8 @@ constexpr int SYS_CHANNEL_WRITE        = 11;
 constexpr int SYS_CHANNEL_READ         = 12;
 constexpr int SYS_HANDLE_CLOSE         = 1;
 constexpr int SYS_PROCESS_EXIT         = 31;
+constexpr int SYS_BLKDEV_READ          = 52;
+constexpr int SYS_BLKDEV_WRITE         = 53;
 
 // -- Protocol types (must match kernel/fs/protocol.hpp) -----------------------
 struct FileMsg {
@@ -215,6 +217,88 @@ static void handle_console(uint32_t file_chan) {
     }
 }
 
+// -- Block device handler -----------------------------------------------------
+static void handle_block(uint32_t file_chan, const char* dev_name) {
+    // Read sector 0 to verify the block device is accessible
+    uint8_t probe[512];
+    int rc = (int)syscall6(SYS_BLKDEV_READ, (uint64_t)dev_name, 0,
+                           (uint64_t)probe, 1, 0);
+    if (rc != 0) {
+        FileResponse err = {-1, 0};
+        channel_write(file_chan, &err, sizeof(err));
+        handle_close(file_chan);
+        return;
+    }
+
+    while (true) {
+        uint8_t buf[4096];
+        rc = channel_read(file_chan, buf, sizeof(buf));
+        if (rc < 0) break;
+
+        if ((size_t)rc < sizeof(FileMsg)) continue;
+        FileMsg* msg = reinterpret_cast<FileMsg*>(buf);
+        uint8_t* data = buf + sizeof(FileMsg);
+        size_t data_len = (size_t)rc - sizeof(FileMsg);
+
+        switch (msg->op) {
+        case FileMsg::Read: {
+            // msg->offset = LBA, msg->length = sector count
+            size_t sectors = msg->length;
+            if (sectors == 0) sectors = 1;
+            if (sectors > 8) sectors = 8;  // max 4KB per read
+
+            uint8_t rbuf[4096];
+            int r = (int)syscall6(SYS_BLKDEV_READ, (uint64_t)dev_name,
+                                  msg->offset, (uint64_t)rbuf, sectors, 0);
+            if (r != 0) {
+                FileResponse resp = {(int32_t)-1, 0};
+                channel_write(file_chan, &resp, sizeof(resp));
+            } else {
+                uint8_t out[sizeof(FileResponse) + 4096];
+                *(FileResponse*)out = {0, sectors * 512};
+                for (size_t i = 0; i < sectors * 512; i++)
+                    out[sizeof(FileResponse) + i] = rbuf[i];
+                channel_write(file_chan, out, sizeof(FileResponse) + sectors * 512);
+            }
+            break;
+        }
+        case FileMsg::Write: {
+            // msg->offset = LBA, msg->length = bytes to write
+            size_t count = msg->length;
+            if (count > data_len) count = data_len;
+            if (count == 0) {
+                FileResponse resp = {-1, 0};
+                channel_write(file_chan, &resp, sizeof(resp));
+                break;
+            }
+            size_t sectors = (count + 511) / 512;
+            int r = (int)syscall6(SYS_BLKDEV_WRITE, (uint64_t)dev_name,
+                                  msg->offset, (uint64_t)data, sectors, 0);
+            FileResponse resp = {r, r == 0 ? count : 0u};
+            channel_write(file_chan, &resp, sizeof(resp));
+            break;
+        }
+        case FileMsg::Stat: {
+            // Return block device as a large file
+            Stat st = {0xFFFFFFFFFFFFFFFFULL, 0, 0};
+            uint8_t out[sizeof(FileResponse) + sizeof(Stat)];
+            *(FileResponse*)out = {0, sizeof(st)};
+            *(Stat*)(out + sizeof(FileResponse)) = st;
+            channel_write(file_chan, out, sizeof(out));
+            break;
+        }
+        case FileMsg::Close:
+            handle_close(file_chan);
+            return;
+        default: {
+            FileResponse resp = {-1, 0};
+            channel_write(file_chan, &resp, sizeof(resp));
+            break;
+        }
+        }
+    }
+}
+
 // -- Entry point --------------------------------------------------------------
 extern "C" void _start() {
     const uint32_t MOUNT_CHAN = 1;
@@ -249,10 +333,8 @@ extern "C" void _start() {
                    rel[6] == 'e' && rel[7] == '\0') {
             handle_console(file_handle);
         } else {
-            // Unknown device: send error and close
-            FileResponse err = {-1, 0};
-            channel_write(file_handle, &err, sizeof(err));
-            handle_close(file_handle);
+            // Unknown device: try block device (e.g., ahci0)
+            handle_block(file_handle, rel);
         }
     }
 

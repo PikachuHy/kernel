@@ -31,3 +31,7 @@ constexpr uint64_t SYSCALL_VMO_MAP         = 41;
 // VFS
 constexpr uint64_t SYSCALL_OPEN            = 50;
 constexpr uint64_t SYSCALL_MOUNT           = 51;
+
+// Block Device
+constexpr uint64_t SYSCALL_BLKDEV_READ     = 52;
+constexpr uint64_t SYSCALL_BLKDEV_WRITE    = 53;

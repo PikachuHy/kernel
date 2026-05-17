@@ -271,7 +271,7 @@ Process* elf_load(const void* elf_data, size_t elf_size,
         for (uint64_t off = 0; off < vr->size; off += PAGE_SIZE) {
             uint64_t va = vr->base_va + off;
             uint64_t vmo_off = vr->vmo_offset + off;
-            uint64_t phys = vr->vmo->GetPage(vmo_off, false);
+            uint64_t phys = vr->vmo->GetPage(vmo_off, true);
             if (phys) {
                 uint64_t pte_flags = PageFlags::Present | PageFlags::User;
                 if (vr->flags & VM_WRITE) pte_flags |= PageFlags::Writable;
@@ -331,6 +331,8 @@ extern "C" uint8_t _binary_devfs_bin_start[];
 extern "C" uint8_t _binary_devfs_bin_end[];
 extern "C" uint8_t _binary_tmpfs_bin_start[];
 extern "C" uint8_t _binary_tmpfs_bin_end[];
+extern "C" uint8_t _binary_fat32_bin_start[];
+extern "C" uint8_t _binary_fat32_bin_end[];
 
 extern "C" void elf_load_fs_servers() {
     // ── devfs ─────────────────────────────────────────────────
@@ -386,14 +388,42 @@ extern "C" void elf_load_fs_servers() {
 
         Rights full{.mask = Rights::Read | Rights::Write |
                            Rights::Duplicate | Rights::Transfer};
-        // Mount channel handle: endpoint B so tmpfs reads messages sent by
-        // kernel (which writes as endpoint A) on queue_b_.
         full.mask |= Rights::ChannelEndpointB;
         proc->handles.Alloc(mount_chan, full);
 
-        mount_add("/", mount_chan, proc);
+        mount_add("/tmp", mount_chan, proc);
 
         thread_start(thr);
-        klog("  tmpfs server started, mounted at /\n");
+        klog("  tmpfs server started, mounted at /tmp\n");
     }
+}
+
+// ── FAT32 FS server ────────────────────────────────────────────
+extern "C" void elf_load_fat32() {
+    uint64_t size = _binary_fat32_bin_end - _binary_fat32_bin_start;
+    klog("Loading FAT32 server ("); klog_hex(size); klog(" bytes)...\n");
+
+    Thread* thr = nullptr;
+    Process* proc = elf_load(_binary_fat32_bin_start, size, "fat32", 1, &thr);
+    if (!proc || !thr) {
+        klog("  FAILED to load FAT32 server\n");
+        return;
+    }
+
+    Channel* mount_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+    if (!mount_chan) {
+        klog("  FAILED to create FAT32 mount Channel\n");
+        return;
+    }
+    new (mount_chan) Channel();
+
+    Rights full{.mask = Rights::Read | Rights::Write |
+                       Rights::Duplicate | Rights::Transfer};
+    full.mask |= Rights::ChannelEndpointB;
+    proc->handles.Alloc(mount_chan, full);
+
+    mount_add("/", mount_chan, proc);
+
+    thread_start(thr);
+    klog("  FAT32 server started, mounted at /\n");
 }

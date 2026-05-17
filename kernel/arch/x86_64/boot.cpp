@@ -24,6 +24,8 @@
 #include "kernel/core/object/port.hpp"
 #include "kernel/core/object/process.hpp"
 #include "kernel/fs/mount.hpp"
+#include "kernel/arch/x86_64/pci.hpp"
+#include "kernel/core/blk/ahci.hpp"
 
 // Placement new (defined in kernel/core/object/port.cpp — re-declared here for boot.cpp's usage)
 void* operator new(size_t, void* p) noexcept;
@@ -313,10 +315,22 @@ extern "C" void kernel_entry(void) {
     klog("Initializing scheduler...\n");
     scheduler_init(hhdm);
 
+    // ── Phase 9: Block Layer ──
+    klog("\n=== Phase 9: Block Layer ===\n\n");
+    klog("  PCI:     bus enumeration via 0xCF8/0xCFC\n");
+    klog("  AHCI:    SATA DMA read/write via PRDT\n");
+    klog("  blkdev:  named device abstraction, LRU buffer cache (64 entries)\n\n");
+
+    klog("Enumerating PCI devices...\n");
+    pci_init();
+
+    klog("Initializing AHCI driver...\n");
+    ahci_init();
+
     // ── Phase 8: VFS ──
     klog("\n=== Phase 8: VFS ===\n\n");
     klog("  VFS:     IPC-native — files are Channels\n");
-    klog("  Servers: devfs (/dev) + tmpfs (/)\n");
+    klog("  Servers: devfs (/dev) + tmpfs (/tmp)\n");
     klog("  Syscall: open (50) + mount (51), read/write via channel\n\n");
 
     klog("Initializing mount namespace...\n");
@@ -346,6 +360,16 @@ extern "C" void kernel_entry(void) {
     // It is defined in kernel/core/elf_loader.cpp (extern "C").
     extern void elf_load_init_process();
     elf_load_init_process();
+
+    // ── Phase 10: FAT32 ──
+    klog("\n=== Phase 10: FAT32 ===\n\n");
+    klog("  FAT32:    ring-3 server, BPB/FAT/directory parser\n");
+    klog("  devfs:    block device passthrough (/dev/ahci0)\n");
+    klog("  Mount:    /\n\n");
+
+    klog("Loading FAT32 server...\n");
+    extern void elf_load_fat32();
+    elf_load_fat32();
 
     klog("Scheduler starting...\n\n");
     asm volatile("sti");
