@@ -293,10 +293,42 @@ extern "C" void kernel_entry(void) {
     // ── Phase 4: SMP bringup ──
     klog("=== Phase 4: SMP Bringup ===\n\n");
 
+    // Search for ACPI RSDP.  Limine may provide a bogus address with
+    // -device ahci, so always verify the signature before trusting it.
+    const char rsdp_sig[8] = {'R','S','D',' ','P','T','R',' '};
     uint64_t rsdp_phys = 0;
+
+    // 1. Try Limine RSDP response
     if (rsdp_request.response && rsdp_request.response->address) {
-        uint64_t rsdp_virt = reinterpret_cast<uint64_t>(rsdp_request.response->address);
-        rsdp_phys = rsdp_virt - hhdm;
+        uint64_t addr = reinterpret_cast<uint64_t>(rsdp_request.response->address);
+        if (addr >= hhdm) addr -= hhdm;
+        // Verify signature
+        uint8_t* p = reinterpret_cast<uint8_t*>(hhdm + addr);
+        bool ok = true;
+        for (int i = 0; i < 8; i++) if (p[i] != (uint8_t)rsdp_sig[i]) ok = false;
+        if (ok) rsdp_phys = addr;
+    }
+
+    // 2. Scan EBDA (first 1KB of segment at BDA 0x40E)
+    if (!rsdp_phys) {
+        uint16_t ebda_seg = *reinterpret_cast<uint16_t*>(hhdm + 0x40E);
+        uint64_t ebda_phys = (uint64_t)ebda_seg << 4;
+        for (uint64_t off = 0; off < 1024; off += 16) {
+            uint8_t* p = reinterpret_cast<uint8_t*>(hhdm + ebda_phys + off);
+            bool ok = true;
+            for (int i = 0; i < 8; i++) if (p[i] != (uint8_t)rsdp_sig[i]) ok = false;
+            if (ok) { rsdp_phys = ebda_phys + off; break; }
+        }
+    }
+
+    // 3. Scan BIOS ROM area (0xE0000–0xFFFFF)
+    if (!rsdp_phys) {
+        for (uint64_t off = 0xE0000; off < 0x100000; off += 16) {
+            uint8_t* p = reinterpret_cast<uint8_t*>(hhdm + off);
+            bool ok = true;
+            for (int i = 0; i < 8; i++) if (p[i] != (uint8_t)rsdp_sig[i]) ok = false;
+            if (ok) { rsdp_phys = off; break; }
+        }
     }
     smp_init(hhdm, rsdp_phys);
 
