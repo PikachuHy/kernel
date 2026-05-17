@@ -25,6 +25,8 @@
 #include "kernel/core/object/port.hpp"
 #include "kernel/core/object/process.hpp"
 #include "kernel/fs/mount.hpp"
+#include "kernel/core/blk/bufcache.hpp"
+#include "kernel/core/blk/ahci.hpp"
 
 // Placement new (defined in kernel/core/object/port.cpp — re-declared here for boot.cpp's usage)
 void* operator new(size_t, void* p) noexcept;
@@ -330,9 +332,15 @@ extern "C" void kernel_entry(void) {
     // ── Phase 9: Block Layer ──
     klog("\n=== Phase 9: Block Layer ===\n\n");
 
+    klog("Initializing block buffer cache...\n");
+    bufcache_init();
+
     klog("Initializing PCI...\n");
     pci_init();
     klog("PCI enumeration complete\n\n");
+
+    klog("Initializing AHCI...\n");
+    ahci_init();
 
     // Hook timer to scheduler for preemption (every 10ms)
     timer_periodic(10000, timer_preempt_callback);

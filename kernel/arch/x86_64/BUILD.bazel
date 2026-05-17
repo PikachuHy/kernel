@@ -39,6 +39,7 @@ cc_library(
         "//kernel/core/mm:mm",
         "//kernel/core/object:object",
         "//kernel/core/sched:sched_hdrs",
+        "//kernel/core/blk:blk",
         "//kernel/fs:fs",
         "//kernel/lib:klib",
         "//third_party/limine:limine",
@@ -49,6 +50,12 @@ cc_library(
 cc_library(
     name = "paging_hdrs",
     hdrs = ["paging.hpp"],
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "pci_hdrs",
+    hdrs = ["pci.hpp"],
     visibility = ["//visibility:public"],
 )
 

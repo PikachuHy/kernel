@@ -37,7 +37,9 @@ echo "    To exit: press Ctrl+A, then X"
 echo ""
 
 qemu-system-x86_64 \
-    -drive file="$DISK_IMG",format=raw,if=ide \
+    -drive file="$DISK_IMG",format=raw,if=none,id=disk \
+    -device ahci,id=ahci \
+    -device ide-hd,drive=disk,bus=ahci.0 \
     -m 512M \
     -smp 2 \
     -nographic \

@@ -2,12 +2,13 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 cc_library(
     name = "blk",
-    srcs = ["blkdev.cpp", "bufcache.cpp"],
-    hdrs = ["blkdev.hpp", "bufcache.hpp"],
+    srcs = ["blkdev.cpp", "bufcache.cpp", "ahci.cpp"],
+    hdrs = ["blkdev.hpp", "bufcache.hpp", "ahci.hpp"],
     deps = [
         "//kernel/core/mm:mm",
         "//kernel/lib:klib",
         "//kernel/arch/x86_64:paging_hdrs",
+        "//kernel/arch/x86_64:pci_hdrs",
     ],
     visibility = ["//visibility:public"],
 )
