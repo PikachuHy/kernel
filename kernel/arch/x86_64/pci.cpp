@@ -96,10 +96,10 @@ static void pci_add_device(uint8_t bus, uint8_t dev, uint8_t func) {
     klog("PCI ");
     klog_hex(bus); klog(":");
     klog_hex(dev); klog(".");
-    klog_hex(func); klog(" vendor=0x");
-    klog_hex(vendor_id); klog(" device=0x");
-    klog_hex(device_id); klog(" class=0x");
-    klog_hex(class_code); klog(" subclass=0x");
+    klog_hex(func); klog(" vendor=");
+    klog_hex(vendor_id); klog(" device=");
+    klog_hex(device_id); klog(" class=");
+    klog_hex(class_code); klog(" subclass=");
     klog_hex(subclass); klog("\n");
 }
 
