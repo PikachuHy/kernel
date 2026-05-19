@@ -341,7 +341,7 @@ extern "C" void kernel_entry(void) {
     elf_load_fs_servers();
 
     // Hook timer to scheduler for preemption (every 10ms)
-    // timer_periodic(10000, timer_preempt_callback);  // disabled for debug
+    // timer_periodic(10000, timer_preempt_callback);  // disabled: #GP at iretq (sel 0x10)
 
     // ── Phase 7: VMM + Process + ring-3 ──────────────────────────
     klog("\n=== Phase 7: VMM + Process + ring-3 ===\n\n");
