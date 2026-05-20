@@ -54,7 +54,7 @@ bash scripts/run.sh
 ## Known Issues
 
 - **Timer preemption #GP**: enabling timer_periodic with ring-3 processes causes #GP (selector 0x10) during context switch — timer disabled for now, cooperative yield works
-- **FAT32 file read**: /kernel.elf opens successfully via VFS but the file content read path causes a page fault in the FAT32 server after the client exits (likely stack overflow from 4KB ClusterChain struct on stack + channel cleanup race)
+- **FAT32 file read**: /kernel.elf opens OK via VFS (132KB). File content read: client's channel_read returns -1 (handle lookup fails) while FAT32 server page-faults at sys_channel_write (fault addr 0x1). Root cause appears to be a dangling pointer or use-after-free in the IPC response path after client exits; needs -d int QEMU tracing
 - **paging_init**: CR3 reload causes crash with Limine's 2MB huge pages. Kernel uses Limine page tables via `paging_save_kernel_template()`. (Phase 2 legacy, deferred)
 - **devfs single-file**: devfs server can only serve one open file at a time (single-threaded event loop) — FAT32 loads after init as workaround
 
