@@ -28,8 +28,9 @@ static void rl(char*buf,int mx){
         pc(c);buf[i++]=c;
     }buf[i]=0;
 }
-static void cmd_ls(const char*path){
-    if(!path||!path[0])path="/";
+static void fixpath(const char*in,char*out){int i=0;if(!in||!in[0]){out[0]='/';out[1]=0;return;}if(in[0]=='/'){while(in[i]){out[i]=in[i];i++;}out[i]=0;return;}out[0]='/';i=1;int j=0;while(in[j]){out[i]=in[j];i++;j++;}out[i]=0;}
+static void cmd_ls(const char*raw){
+    char path[256];fixpath(raw,path);
     uint32_t f=(uint32_t)syscall6(SYS_OPEN,(uint64_t)path,O_RDONLY,0,0,0);
     if(f==0||f==0xFFFFFFFF){p("  nf\n");return;}
     FileMsg m={FileMsg::Readdir,0,0,16};
@@ -43,8 +44,8 @@ static void cmd_ls(const char*path){
     for(uint32_t i=0;i<cnt;i++){p("  ");p(dd[i].type?"[D]":"[F]");p(" ");p(dd[i].name);p(" (");pd(dd[i].size);p(")\n");}
     cc(f);
 }
-static void cmd_cat(const char*path){
-    if(!path||!path[0]){p("  usage: cat <path>\n");return;}
+static void cmd_cat(const char*raw){
+    char path[256];fixpath(raw,path);
     uint32_t f=(uint32_t)syscall6(SYS_OPEN,(uint64_t)path,O_RDONLY,0,0,0);
     if(f==0||f==0xFFFFFFFF){p("  nf\n");return;}
     FileMsg m={FileMsg::Read,0,0,64};
@@ -57,8 +58,8 @@ static void cmd_cat(const char*path){
     for(uint64_t i=0;i<rp->size&&i<64;i++){uint8_t b=rb[sizeof(FileResponse)+i];if(b>=32&&b<127){char c[2]={(char)b,0};p(c);}else p(".");}
     p("\n");cc(f);
 }
-static void cmd_stat(const char*path){
-    if(!path||!path[0]){p("  usage: stat <path>\n");return;}
+static void cmd_stat(const char*raw){
+    char path[256];fixpath(raw,path);
     uint32_t f=(uint32_t)syscall6(SYS_OPEN,(uint64_t)path,O_RDONLY,0,0,0);
     if(f==0||f==0xFFFFFFFF){p("  nf\n");return;}
     FileMsg m={FileMsg::Stat,0,0,0};
