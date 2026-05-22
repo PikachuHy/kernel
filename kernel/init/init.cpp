@@ -100,7 +100,21 @@ extern "C" void _start() {
     print("\n");
 
     if (fh != 0 && fh != 0xFFFFFFFF) {
-        print("  [3] /kernel.elf opened OK via FAT32\n");
+        print("  [3] /kernel.elf opened OK\n");
+        print("  [4] reading first 4 bytes...\n");
+        FileMsg msg = {FileMsg::Read, 0, 0, 4};
+        if (channel_write((uint32_t)fh, &msg, sizeof(msg)) == 0) {
+            uint8_t rbuf[sizeof(FileResponse)+4];
+            if (channel_read((uint32_t)fh, rbuf, sizeof(rbuf)) >= (int)sizeof(FileResponse)) {
+                FileResponse* resp = (FileResponse*)rbuf;
+                if (resp->result == 0 && resp->size >= 4) {
+                    uint8_t* d = rbuf + sizeof(FileResponse);
+                    print("  [5] data: "); print_hex(d[0]); print(" "); print_hex(d[1]);
+                    print(" "); print_hex(d[2]); print(" "); print_hex(d[3]);
+                    print(d[0]==0x7F&&d[1]=='E'&&d[2]=='L'&&d[3]=='F'?" ELF=YES\n":" ELF=NO\n");
+                }
+            }
+        }
     } else {
         print("  [3] /kernel.elf NOT FOUND\n");
     }

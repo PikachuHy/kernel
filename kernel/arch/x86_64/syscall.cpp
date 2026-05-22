@@ -100,6 +100,10 @@ uint64_t sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     };
     auto* args = reinterpret_cast<const ChannelWriteArgs*>(a2);
 
+    // Defensive: reject obviously-bogus user pointers (seen as 0x1 from
+    // ring-3 processes with corrupted stack frames).
+    if (reinterpret_cast<uint64_t>(args) < 4096) return -1;
+
     return static_cast<Channel*>(obj)->Write(
         args->data, args->data_len, args->handles, args->num_handles, endpoint_b);
 }
