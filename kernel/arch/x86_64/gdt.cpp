@@ -102,13 +102,6 @@ void tss_init() {
     if (!df_ist_phys) KPANIC("TSS: failed to allocate #DF IST stack");
     tss->ist[1] = DIRECT_MAP_BASE + reinterpret_cast<uint64_t>(df_ist_phys) + PAGE_SIZE * 4;
 
-    // IST3 (tss->ist[2]): dedicated stack for timer IRQ (vector 32).
-    // Prevents the IRET frame corruption that occurs when the timer
-    // interrupt shares the thread's RSP0 stack.
-    void* timer_ist_phys = buddy_alloc_pages(2);  // 16KB
-    if (!timer_ist_phys) KPANIC("TSS: failed to allocate timer IST stack");
-    tss->ist[2] = DIRECT_MAP_BASE + reinterpret_cast<uint64_t>(timer_ist_phys) + PAGE_SIZE * 4;
-
     uint8_t* bitmap = &g_tss_data[sizeof(TSS)];
     for (int i = 0; i < 8192; i++) bitmap[i] = 0xFF;
     g_tss_data[sizeof(g_tss_data) - 1] = 0xFF;

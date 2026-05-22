@@ -341,14 +341,7 @@ extern "C" void kernel_entry(void) {
     elf_load_fs_servers();
 
     // Hook timer to scheduler for preemption (every 10ms)
-    // timer_periodic(10000, timer_preempt_callback);  // disabled: irq_stub iretq #GP (sel 0x10)
-    // The iretq CS in the interrupt frame becomes 0x10 regardless of:
-    //   - CS/SS force-correction (both RPL-based and explicit cmpq)
-    //   - iretq frame save/restore in irq_stub
-    //   - IST3 dedicated stack for timer
-    //   - cli in enter_usermode before ring-3 transition
-    // Likely needs QEMU GDB debugging to trace CS value origin.
-    // with correct stack offsets (17 pushes before the iretq frame).
+    timer_periodic(10000, timer_preempt_callback);
 
     // ── Phase 7: VMM + Process + ring-3 ──────────────────────────
     klog("\n=== Phase 7: VMM + Process + ring-3 ===\n\n");
