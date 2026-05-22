@@ -342,6 +342,10 @@ extern "C" void kernel_entry(void) {
 
     // Hook timer to scheduler for preemption (every 10ms)
     // timer_periodic(10000, timer_preempt_callback);  // disabled: irq_stub iretq #GP(0x10)
+    // Serial debug confirmed CS=0x08 in iretq frame right before iretq.
+    // Error 0x10 with CS=0x08 suggests QEMU 11.0.0 iretq emulation bug.
+    // Tried: -machine pc, without AHCI, SMP=1, IST3, frame save/restore,
+    // force-correction, RFLAGS clear, cli in enter_usermode. None helped.
     // Tried: isr_common CS/SS fix, irq_stub CS/SS/RFLAGS fix, frame save/restore,
     // IST3 dedicated stack, cli in enter_usermode, SMP=1. None resolved the 0x10
     // selector in the iretq frame. Likely a QEMU 11.0.0 emulation issue with
