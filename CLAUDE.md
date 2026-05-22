@@ -35,6 +35,7 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 | 10: FAT32 | `docs/superpowers/plans/2026-05-17-phase-10-fat32.md` | Done (BPB/FAT/dir, file open+read, ELF magic 0x7F'E'L'F' verified)
 | Fix Known Issues | `docs/superpowers/plans/2026-05-05-fix-known-issues.md` | Done (TSS+buddy, FAT32 read, paging deferred)
 | Timer #GP Debug | (N/A — ad-hoc) | Partial: isr_common CS/SS fix committed, irq_stub unresolved |
+| 11: Interactive Shell | (N/A — ad-hoc) | Done (serial_getc syscall, readline, ls/cat/stat/help/exit) |
 
 ## Build / Test / Lint
 
