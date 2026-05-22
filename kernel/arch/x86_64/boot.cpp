@@ -341,7 +341,11 @@ extern "C" void kernel_entry(void) {
     elf_load_fs_servers();
 
     // Hook timer to scheduler for preemption (every 10ms)
-    timer_periodic(10000, timer_preempt_callback);
+    // timer_periodic(10000, timer_preempt_callback);  // disabled: irq_stub iretq #GP(0x10)
+    // Tried: isr_common CS/SS fix, irq_stub CS/SS/RFLAGS fix, frame save/restore,
+    // IST3 dedicated stack, cli in enter_usermode, SMP=1. None resolved the 0x10
+    // selector in the iretq frame. Likely a QEMU 11.0.0 emulation issue with
+    // LAPIC timer during ring transitions. Needs QEMU GDB debugging.
 
     // ── Phase 7: VMM + Process + ring-3 ──────────────────────────
     klog("\n=== Phase 7: VMM + Process + ring-3 ===\n\n");
