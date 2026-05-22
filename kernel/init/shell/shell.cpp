@@ -18,13 +18,14 @@ static int cw(uint32_t h,const void*d,size_t n){sw.d=d;sw.sz=n;sw.hnd=nullptr;sw
 static int cr(uint32_t h,void*b,size_t sz){return(int)syscall6(SYS_CHANNEL_READ,h,(uint64_t)b,sz,0,0);}
 static void cc(uint32_t h){syscall6(SYS_HANDLE_CLOSE,h,0,0,0,0);}
 static char getc(){return(char)(syscall6(SYS_SERIAL_READ,0,0,0,0,0)&0xFF);}
+static void pc(char c){char s[2]={c,0};p(s);}
 static void rl(char*buf,int mx){
     int i=0;
     while(i<mx-1){char c=getc();
-        if(c=='\r'){buf[i++]='\n';break;}
-        if(c=='\b'||c==127){if(i>0)i--;continue;}
+        if(c=='\r'){pc('\n');buf[i++]='\n';break;}
+        if(c=='\b'||c==127){if(i>0){i--;pc('\b');p(" ");pc('\b');}continue;}
         if(c<32)continue;
-        buf[i++]=c;
+        pc(c);buf[i++]=c;
     }buf[i]=0;
 }
 static void cmd_ls(const char*path){
