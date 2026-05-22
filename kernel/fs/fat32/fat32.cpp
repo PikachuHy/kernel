@@ -202,6 +202,12 @@ static uint32_t dir_search(uint32_t dir_cluster, const char* name,
 static uint32_t fat32_open(const char* path, uint32_t* out_size, bool* out_is_dir) {
     uint32_t dir = s_root;
     if (path[0] == '/') path++;
+    // Empty path means root directory
+    if (path[0] == '\0') {
+        // Root directory has size=0 and is_dir=true
+        *out_size = 0; *out_is_dir = true;
+        return s_root;
+    }
     while (*path) {
         char comp[256]; int ci = 0;
         while (*path && *path != '/') { if (ci < 255) comp[ci++] = *path; path++; }
