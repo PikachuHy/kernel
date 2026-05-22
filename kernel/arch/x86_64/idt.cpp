@@ -310,7 +310,10 @@ void idt_init() {
         (uint64_t)&irq_stub_40, (uint64_t)&irq_stub_41, (uint64_t)&irq_stub_42, (uint64_t)&irq_stub_43,
         (uint64_t)&irq_stub_44, (uint64_t)&irq_stub_45, (uint64_t)&irq_stub_46, (uint64_t)&irq_stub_47,
     };
-    for (int i = 0; i < 16; i++) idt_set_gate(32 + i, stubs[i], 0, 0x8E);
+    for (int i = 0; i < 16; i++) {
+        uint8_t ist = (i == 0) ? 3 : 0;  // IST3 for timer (vector 32)
+        idt_set_gate(32 + i, stubs[i], ist, 0x8E);
+    }
 
     idtr.limit = sizeof(IDTEntry) * IDT_ENTRIES - 1;
     idtr.base = (uint64_t)&idt[0];
