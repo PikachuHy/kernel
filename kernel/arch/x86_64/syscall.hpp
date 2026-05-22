@@ -35,3 +35,6 @@ constexpr uint64_t SYSCALL_MOUNT           = 51;
 // Block Device
 constexpr uint64_t SYSCALL_BLKDEV_READ     = 52;
 constexpr uint64_t SYSCALL_BLKDEV_WRITE    = 53;
+
+// Serial I/O
+constexpr uint64_t SYSCALL_SERIAL_READ     = 54;

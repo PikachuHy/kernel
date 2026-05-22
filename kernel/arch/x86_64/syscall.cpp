@@ -435,11 +435,25 @@ uint64_t sys_blkdev_write(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
     return static_cast<uint64_t>(rc);
 }
 
+// ── Serial I/O ───────────────────────────────────────────────────
+
+uint64_t sys_serial_read(uint64_t, uint64_t, uint64_t, uint64_t) {
+    uint16_t port = 0x3F8;
+    uint8_t byte;
+    asm volatile(
+        "1: inb $0x3FD, %%al\n"
+        "testb $1, %%al\n"
+        "jz 1b\n"
+        "inb %%dx, %%al\n"
+        : "=a"(byte) : "d"(port) : "memory");
+    return byte;
+}
+
 // ── Dispatch table ───────────────────────────────────────────────
 
 using syscall_fn_t = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t);
 
-constexpr int MAX_SYSCALL = 54;
+constexpr int MAX_SYSCALL = 55;
 syscall_fn_t g_syscall_table[MAX_SYSCALL];
 
 void init_syscall_table() {
@@ -462,6 +476,7 @@ void init_syscall_table() {
     g_syscall_table[SYSCALL_MOUNT]          = sys_mount;
     g_syscall_table[SYSCALL_BLKDEV_READ]    = sys_blkdev_read;
     g_syscall_table[SYSCALL_BLKDEV_WRITE]   = sys_blkdev_write;
+    g_syscall_table[SYSCALL_SERIAL_READ]    = sys_serial_read;
 }
 
 extern "C" uint64_t syscall_dispatcher(uint64_t num, uint64_t a1, uint64_t a2,
