@@ -84,8 +84,8 @@ extern "C" void _start(){
         char*sp=cmd;while(*sp&&*sp!=' ')sp++;
         if(*sp==' '){*sp=0;arg=sp+1;while(*arg==' ')arg++;}
         if(cmd[0]==0||cmd[0]=='\n')continue;
-        if(cmd[0]=='h'&&!cmd[1])p("Commands: help ls cat stat exit\n");
-        else if(cmd[0]=='l'&&!cmd[1])cmd_ls(arg);
+        if(cmd[0]=='h'&&cmd[1]=='e'&&cmd[2]=='l'&&cmd[3]=='p'&&!cmd[4])p("Commands: help ls cat stat exit\n");
+        else if(cmd[0]=='l'&&cmd[1]=='s'&&!cmd[2])cmd_ls(arg);
         else if(cmd[0]=='c'&&cmd[1]=='a'&&cmd[2]=='t'&&!cmd[3])cmd_cat(arg);
         else if(cmd[0]=='s'&&cmd[1]=='t'&&cmd[2]=='a'&&cmd[3]=='t'&&!cmd[4])cmd_stat(arg);
         else if(cmd[0]=='e'&&cmd[1]=='x'&&cmd[2]=='i'&&cmd[3]=='t'&&!cmd[4]){p("bye\n");break;}
