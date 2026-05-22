@@ -54,10 +54,11 @@ static void debug_dec(uint64_t n) {
     while (n > 0 && i >= 0) { b[i--] = '0' + (n % 10); n /= 10; }
     debug(&b[i + 1]);
 }
+// Static WA struct — avoids stack corruption in deep call chains.
+static struct { const void* d; size_t sz; const uint32_t* hnd; size_t n; } s_wa;
 static int ch_write(uint32_t h, const void* d, size_t n) {
-    struct WA { const void* d; size_t sz; const uint32_t* hnd; size_t n; };
-    WA a = {d, n, nullptr, 0};
-    return (int)syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&a, 0, 0, 0);
+    s_wa.d = d; s_wa.sz = n; s_wa.hnd = nullptr; s_wa.n = 0;
+    return (int)syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&s_wa, 0, 0, 0);
 }
 static int ch_read(uint32_t h, void* b, size_t sz) {
     return (int)syscall6(SYS_CHANNEL_READ, h, (uint64_t)b, sz, 0, 0);

@@ -32,7 +32,7 @@ A modern hybrid kernel written in C++26 targeting x86-64, with production ambiti
 | 7: VMM + Process | `docs/superpowers/plans/2026-05-10-phase-7-vmm-process.md` | Done (incl. 3 fixes) |
 | 8: VFS | `docs/superpowers/plans/2026-05-16-phase-8-vfs.md` | Done (incl. syscall per-thread stack fix) |
 | 9: Block Layer | `docs/superpowers/plans/2026-05-17-phase-9-block-layer.md` | Done |
-| 10: FAT32 | `docs/superpowers/plans/2026-05-17-phase-10-fat32.md` | Done (BPB/FAT/dir, boot integration, file open via VFS; file read path needs debug)
+| 10: FAT32 | `docs/superpowers/plans/2026-05-17-phase-10-fat32.md` | Done (BPB/FAT/dir, file open+read via VFS, ELF magic verified)
 | Fix Known Issues | `docs/superpowers/plans/2026-05-05-fix-known-issues.md` | Done (TSS+buddy; paging deferred) |
 
 ## Build / Test / Lint
@@ -54,7 +54,7 @@ bash scripts/run.sh
 ## Known Issues
 
 - **Timer preemption #GP**: enabling timer_periodic with ring-3 processes causes #GP (selector 0x10) during context switch — timer disabled for now, cooperative yield works
-- **FAT32 file read**: /kernel.elf opens successfully via VFS but the file content read path causes a page fault in the FAT32 server after the client exits (likely stack overflow from 4KB ClusterChain struct on stack + channel cleanup race)
+- **FAT32 file read** (FIXED): root cause was stack-local WA struct in ring-3 `ch_write` getting corrupted (address 0x1). Fixed by using static WA struct + kernel-side defensive null check in sys_channel_write
 - **paging_init**: CR3 reload causes crash with Limine's 2MB huge pages. Kernel uses Limine page tables via `paging_save_kernel_template()`. (Phase 2 legacy, deferred)
 - **devfs single-file**: devfs server can only serve one open file at a time (single-threaded event loop) — FAT32 loads after init as workaround
 

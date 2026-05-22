@@ -208,7 +208,14 @@ isr_common:
     popq %rax
 
     addq $16, %rsp   // skip int_no and err_code
-    iretq
+    // Force-correct CS/SS in iretq frame. IST #PF handling may overwrite
+    // frame fields below the save area on the IST stack.
+    movq 8(%rsp), %rdi       // saved CS
+    testb $3, %dil
+    jz 1f                     // ring-0: CS=0x08 is fine
+    movq $0x1B, 8(%rsp)       // force ring-3 CS
+    movq $0x13, 32(%rsp)      // force ring-3 SS
+1:  iretq
 )");
 
 // Exception 0-7: no error code
