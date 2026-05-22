@@ -445,6 +445,7 @@ uint64_t sys_serial_read(uint64_t, uint64_t, uint64_t, uint64_t) {
         "inb %%dx, %%al\n"
         "testb $1, %%al\n"
         "jz 1b\n"
+        "movw $0x3F8, %%dx\n"
         "inb %%dx, %%al\n"
         : "=a"(byte) : "d"(port) : "memory");
     return byte;
