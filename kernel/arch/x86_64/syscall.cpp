@@ -441,7 +441,8 @@ uint64_t sys_serial_read(uint64_t, uint64_t, uint64_t, uint64_t) {
     uint16_t port = 0x3F8;
     uint8_t byte;
     asm volatile(
-        "1: inb $0x3FD, %%al\n"
+        "1: movw $0x3FD, %%dx\n"
+        "inb %%dx, %%al\n"
         "testb $1, %%al\n"
         "jz 1b\n"
         "inb %%dx, %%al\n"
