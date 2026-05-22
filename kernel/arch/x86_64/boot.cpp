@@ -365,6 +365,14 @@ extern "C" void kernel_entry(void) {
     extern void elf_load_fat32();
     elf_load_fat32();
 
+    // ── Phase 11: Shell ──
+    klog("\n=== Phase 11: Shell ===\n\n");
+    klog("  Demo:    lists files, reads /kernel.elf\n\n");
+
+    klog("Loading shell...\n");
+    extern void elf_load_shell();
+    elf_load_shell();
+
     klog("Scheduler starting...\n\n");
     asm volatile("sti");
     scheduler_start();  // never returns

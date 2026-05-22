@@ -333,6 +333,8 @@ extern "C" uint8_t _binary_tmpfs_bin_start[];
 extern "C" uint8_t _binary_tmpfs_bin_end[];
 extern "C" uint8_t _binary_fat32_bin_start[];
 extern "C" uint8_t _binary_fat32_bin_end[];
+extern "C" uint8_t _binary_shell_bin_start[];
+extern "C" uint8_t _binary_shell_bin_end[];
 
 extern "C" void elf_load_fs_servers() {
     // ── devfs ─────────────────────────────────────────────────
@@ -426,4 +428,20 @@ extern "C" void elf_load_fat32() {
 
     thread_start(thr);
     klog("  FAT32 server started, mounted at /\n");
+}
+
+// ── Shell ────────────────────────────────────────────────────────
+extern "C" void elf_load_shell() {
+    uint64_t size = _binary_shell_bin_end - _binary_shell_bin_start;
+    klog("Loading shell ("); klog_hex(size); klog(" bytes)...\n");
+
+    Thread* thr = nullptr;
+    Process* proc = elf_load(_binary_shell_bin_start, size, "shell", 1, &thr);
+    if (!proc || !thr) {
+        klog("  FAILED to load shell\n");
+        return;
+    }
+
+    thread_start(thr);
+    klog("  shell started\n");
 }

@@ -219,7 +219,65 @@ static uint32_t fat32_open(const char* path, uint32_t* out_size, bool* out_is_di
 
 // ── File handle ───────────────────────────────────────────────────
 struct OpenFile { uint32_t chan, start_cluster; uint64_t size; bool is_dir; };
+struct Dirent { char name[256]; uint32_t type; uint64_t size; };
 static OpenFile s_of;
+
+// List directory entries starting at given cluster.
+// Returns count of entries read, or -1 on error.
+static int list_entries(uint32_t dir_cl, uint32_t cookie, Dirent* out, uint32_t max) {
+    char lfn[256]; int lfn_len = 0;
+    uint32_t cl = dir_cl;
+    uint32_t found = 0;
+
+    while (cl >= 2 && cl < 0x0FFFFFF8) {
+        for (uint32_t si = 0; si < s_spc; si++) {
+            uint8_t sec[512];
+            if (read_sectors(cluster_to_lba(cl) + si, sec, 1) != 0) continue;
+            for (int e = 0; e < 16; e++) {
+                uint8_t* en = sec + e * 32;
+                if (en[0] == 0x00) { lfn_len = 0; continue; }
+                if (en[0] == 0xE5) continue;
+                if (en[11] == 0x0F) {
+                    LfnEntry* le = (LfnEntry*)en;
+                    int ord = le->ord & 0x3F;
+                    if (ord >= 1 && ord <= 20) {
+                        if (le->ord & 0x40) lfn_len = 0;
+                        int base = (ord - 1) * 13;
+                        for (int c = 0; c < 5 && base+c < 255; c++) lfn[base+c] = (char)le->chars1[c];
+                        for (int c = 0; c < 6 && base+5+c < 255; c++) lfn[base+5+c] = (char)le->chars2[c];
+                        for (int c = 0; c < 2 && base+11+c < 255; c++) lfn[base+11+c] = (char)le->chars3[c];
+                        if (ord <= lfn_len || lfn_len == 0) lfn_len = ord;
+                        if (le->ord & 0x40) lfn[ord * 13 < 256 ? ord * 13 : 255] = '\0';
+                    }
+                    continue;
+                }
+                if (en[11] & 0x08) { lfn_len = 0; continue; }
+                DirEntry* de = (DirEntry*)en;
+                char resolved[256];
+                if (lfn_len > 0) {
+                    int i = 0; while (i < 255 && lfn[i]) { resolved[i] = lfn[i]; i++; }
+                    resolved[i] = '\0';
+                } else {
+                    int ri = 0;
+                    for (int i = 0; i < 8 && de->name[i] != ' '; i++) resolved[ri++] = de->name[i];
+                    if (de->ext[0] != ' ') { resolved[ri++] = '.';
+                        for (int i = 0; i < 3 && de->ext[i] != ' '; i++) resolved[ri++] = de->ext[i]; }
+                    resolved[ri] = '\0';
+                }
+                lfn_len = 0;
+                if (cookie > 0) { cookie--; continue; }
+                if (found >= max) return (int)found;
+                int ni = 0; while (resolved[ni] && ni < 255) { out[found].name[ni] = resolved[ni]; ni++; }
+                out[found].name[ni] = '\0';
+                out[found].type = (de->attr & 0x10) ? 1u : 0u;
+                out[found].size = de->file_size;
+                found++;
+            }
+        }
+        cl = read_fat_entry(cl);
+    }
+    return (int)found;
+}
 
 static void handle_file(uint32_t ch, uint32_t start, uint32_t size, bool is_dir) {
     s_of.chan = ch; s_of.start_cluster = start; s_of.size = size; s_of.is_dir = is_dir;
@@ -264,6 +322,24 @@ static void handle_file(uint32_t ch, uint32_t start, uint32_t size, bool is_dir)
             *(FileResponse*)out = {0, sizeof(st)};
             *(Stat*)(out + sizeof(FileResponse)) = st;
             ch_write(ch, out, sizeof(out));
+            break;
+        }
+        case FileMsg::Readdir: {
+            if (!s_of.is_dir) { resp.result = -1; ch_write(ch, &resp, sizeof(resp)); break; }
+            uint32_t cookie = (uint32_t)msg->offset;
+            Dirent dirs[16];
+            int n = list_entries(s_of.start_cluster, cookie, dirs, 16);
+            if (n < 0) { resp.result = -1; ch_write(ch, &resp, sizeof(resp)); break; }
+            uint32_t data_sz = (uint32_t)n * sizeof(Dirent);
+            uint8_t out[sizeof(FileResponse) + 16 * sizeof(Dirent)];
+            *(FileResponse*)out = {0, data_sz};
+            uint8_t* dout = out + sizeof(FileResponse);
+            for (uint32_t i = 0; i < (uint32_t)n; i++) {
+                uint8_t* src = (uint8_t*)&dirs[i];
+                for (size_t j = 0; j < sizeof(Dirent); j++)
+                    dout[i * sizeof(Dirent) + j] = src[j];
+            }
+            ch_write(ch, out, sizeof(FileResponse) + data_sz);
             break;
         }
         case FileMsg::Close: ch_close(ch); return;
