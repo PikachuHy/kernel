@@ -202,102 +202,23 @@ extern "C" void kernel_entry(void) {
         klog("\n");
     }
 
-    // 3. Higher-half paging takeover
-    // paging_init has a CR3-reload triple-fault bug (debugging in progress).
-    // For now, use Limine's page tables and save them as the kernel template.
-    klog("Using Limine page tables...\n");
+    // 3. Save Limine page tables template (for SMP trampoline & later use)
     paging_save_kernel_template();
 
-    // 4. Buddy allocator
+    // 4. Buddy allocator (needed by paging_init for page tables)
     klog("Initializing buddy allocator...\n");
     buddy_init(hhdm, 0);
     klog("  buddy ready\n\n");
 
-    // 5. Slab allocator using buddy for slab pages
-    klog("Initializing slab allocator...\n");
-    slab_init(hhdm);
-    klog("  kmalloc ready (16B-2048B)\n\n");
-
-    // TSS: must be after bitmap_init since it allocates kernel interrupt stacks
-    klog("Initializing TSS...\n");
-    tss_init();
-
-    // ── kmalloc / new / delete demo ──
-    {
-        klog("  [demo] kmalloc + operator new:\n");
-
-        // kmalloc/kfree
-        void* k1 = kmalloc(32);
-        void* k2 = kmalloc(128);
-        void* k3 = kmalloc(2048);
-        klog("    kmalloc(32)   -> "); klog_hex(reinterpret_cast<uint64_t>(k1)); klog("\n");
-        klog("    kmalloc(128)  -> "); klog_hex(reinterpret_cast<uint64_t>(k2)); klog("\n");
-        klog("    kmalloc(2048) -> "); klog_hex(reinterpret_cast<uint64_t>(k3)); klog("\n");
-
-        if (k1) *static_cast<char*>(k1) = 'A';
-        if (k2) *static_cast<char*>(k2) = 'B';
-
-        kfree(k1);
-        kfree(k2);
-        kfree(k3);
-        klog("    kfree: OK\n");
-
-        // operator new / delete
-        struct alignas(16) DemoObj { int x = 42; int y = 99; };
-        DemoObj* obj = new DemoObj();
-        klog("    new DemoObj -> "); klog_hex(reinterpret_cast<uint64_t>(obj)); klog("\n");
-        klog("    obj->x="); klog_hex(obj->x); klog(" obj->y="); klog_hex(obj->y);
-        klog(" (expect 0x2A, 0x63)\n");
-        delete obj;
-        klog("    delete: OK\n");
-
-        // kmalloc_usable_size
-        void* us = kmalloc(100);
-        klog("    kmalloc(100).usable = "); klog_hex(kmalloc_usable_size(us));
-        klog(" (expect 128)\n");
-        kfree(us);
-
-        klog("  [demo] All allocator tests passed\n\n");
-    }
-
-    // ── Phase 3: APIC, Timer, Interrupts ──
-    klog("=== Phase 3: APIC + Timer + Interrupts ===\n\n");
-
-    klog("Disabling legacy PIC...\n");
-    pic_disable();
-
-    klog("Initializing LAPIC...\n");
-    lapic_init(hhdm);
-
-    klog("Initializing I/O APIC...\n");
-    ioapic_init(hhdm);
-
-    klog("Initializing IRQ dispatch...\n");
-    irq_init();
-
-    klog("Initializing timer...\n");
-    timer_init(hhdm);
-
-    klog("Initializing syscall...\n");
-    syscall_init();
-
-    // ── Phase 6: Object Manager + IPC ──
-    klog("\n=== Phase 6: Object Manager + IPC ===\n\n");
-    klog("  KernelObject:  ref-counted base, Type enum (Channel, Port, Process, Vmo)\n");
-    klog("  HandleTable:   1024 entries, spinlock, free-list alloc\n");
-    klog("  Channel:       bidirectional, FIFO, data + handle transfer\n");
-    klog("  Port:          many-to-one, named service discovery\n");
-    klog("  Syscall:       LSTAR, syscall_entry, dispatcher (10 handlers)\n\n");
-
-    // ── Phase 4: SMP bringup ──
+    // ── Phase 4: SMP bringup (must run on Limine page tables) ──
     klog("=== Phase 4: SMP Bringup ===\n\n");
 
-    uint64_t rsdp_phys = 0;
     if (rsdp_request.response && rsdp_request.response->address) {
         uint64_t rsdp_virt = reinterpret_cast<uint64_t>(rsdp_request.response->address);
-        rsdp_phys = rsdp_virt - hhdm;
+        smp_init(hhdm, rsdp_virt - hhdm);
+    } else {
+        smp_init(hhdm, 0);
     }
-    smp_init(hhdm, rsdp_phys);
 
     // ── SMP summary ──
     klog("\n  --- CPU Summary ---\n");
@@ -308,6 +229,71 @@ extern "C" void kernel_entry(void) {
         klog(g_per_cpu[i].online ? "yes\n" : "NO\n");
     }
     klog("  Total: "); klog_hex(smp_cpu_count()); klog(" CPU(s)\n\n");
+
+    // 5. Higher-half paging takeover (after SMP — uses Limine page tables)
+    klog("Initializing kernel page tables...\n");
+    paging_init(hhdm, kernel_phys, kernel_virt, kernel_size);
+    paging_save_kernel_template();
+    klog("\n");
+
+    // 6. Slab allocator (uses buddy, runs on our page tables)
+    klog("Initializing slab allocator...\n");
+    slab_init(DIRECT_MAP_BASE);
+    klog("  kmalloc ready (16B-2048B)\n\n");
+
+    // TSS: allocates IST stacks via buddy, must be after buddy_init
+    klog("Initializing TSS...\n");
+    tss_init();
+
+    // ── kmalloc / new / delete demo ──
+    {
+        klog("  [demo] kmalloc + operator new:\n");
+        void* k1 = kmalloc(32);
+        void* k2 = kmalloc(128);
+        void* k3 = kmalloc(2048);
+        klog("    kmalloc(32)   -> "); klog_hex(reinterpret_cast<uint64_t>(k1)); klog("\n");
+        klog("    kmalloc(128)  -> "); klog_hex(reinterpret_cast<uint64_t>(k2)); klog("\n");
+        klog("    kmalloc(2048) -> "); klog_hex(reinterpret_cast<uint64_t>(k3)); klog("\n");
+        if (k1) *static_cast<char*>(k1) = 'A';
+        if (k2) *static_cast<char*>(k2) = 'B';
+        kfree(k1); kfree(k2); kfree(k3);
+        klog("    kfree: OK\n");
+        struct alignas(16) DemoObj { int x = 42; int y = 99; };
+        DemoObj* obj = new DemoObj();
+        klog("    new DemoObj -> "); klog_hex(reinterpret_cast<uint64_t>(obj)); klog("\n");
+        klog("    obj->x="); klog_hex(obj->x); klog(" obj->y="); klog_hex(obj->y);
+        klog(" (expect 0x2A, 0x63)\n");
+        delete obj;
+        klog("    delete: OK\n");
+        void* us = kmalloc(100);
+        klog("    kmalloc(100).usable = "); klog_hex(kmalloc_usable_size(us));
+        klog(" (expect 128)\n");
+        kfree(us);
+        klog("  [demo] All allocator tests passed\n\n");
+    }
+
+    // ── Phase 3: APIC, Timer, Interrupts ──
+    klog("=== Phase 3: APIC + Timer + Interrupts ===\n\n");
+    klog("Disabling legacy PIC...\n");
+    pic_disable();
+    klog("Initializing LAPIC...\n");
+    lapic_init(hhdm);
+    klog("Initializing I/O APIC...\n");
+    ioapic_init(hhdm);
+    klog("Initializing IRQ dispatch...\n");
+    irq_init();
+    klog("Initializing timer...\n");
+    timer_init(hhdm);
+    klog("Initializing syscall...\n");
+    syscall_init();
+
+    // ── Phase 6: Object Manager + IPC ──
+    klog("\n=== Phase 6: Object Manager + IPC ===\n\n");
+    klog("  KernelObject:  ref-counted base, Type enum (Channel, Port, Process, Vmo)\n");
+    klog("  HandleTable:   1024 entries, spinlock, free-list alloc\n");
+    klog("  Channel:       bidirectional, FIFO, data + handle transfer\n");
+    klog("  Port:          many-to-one, named service discovery\n");
+    klog("  Syscall:       LSTAR, syscall_entry, dispatcher (10 handlers)\n\n");
 
     // ── Phase 5: Scheduler ──
     klog("=== Phase 5: Scheduler ===\n\n");
