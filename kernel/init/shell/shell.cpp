@@ -78,6 +78,7 @@ extern "C" void _start(){
     while(1){
         p("shell> ");
         rl(line,256);p(line);
+        {int j=0;while(line[j])j++;if(j>0&&line[j-1]=='\n')line[j-1]=0;}
         char*cmd=line,*arg=nullptr;
         while(*cmd==' ')cmd++;
         char*sp=cmd;while(*sp&&*sp!=' ')sp++;
