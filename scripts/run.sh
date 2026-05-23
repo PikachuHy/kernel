@@ -46,4 +46,5 @@ qemu-system-x86_64 \
     -display none \
     -serial stdio \
     -monitor none \
-    -no-reboot
+    -no-reboot \
+	    -device isa-debug-exit,iobase=0xf4,iosize=0x04

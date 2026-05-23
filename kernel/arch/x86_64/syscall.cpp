@@ -249,6 +249,8 @@ uint64_t sys_process_create(uint64_t a1, uint64_t, uint64_t, uint64_t) {
 }
 
 uint64_t sys_process_exit(uint64_t, uint64_t, uint64_t, uint64_t) {
+    // Tell QEMU to exit via isa-debug-exit device (port 0xf4).
+    asm volatile("outb %0, %1" : : "a"((uint8_t)0), "Nd"((uint16_t)0xf4));
     thread_exit();
     return 0; // unreachable
 }
