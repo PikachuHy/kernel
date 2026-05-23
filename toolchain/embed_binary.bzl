@@ -11,12 +11,13 @@ def _embed_binary_impl(ctx):
     ctx.actions.run_shell(
         inputs = [ctx.file.src],
         outputs = [out],
-        command = 'out_abs="$PWD/{out}" && cp "{src}" "{out_dir}/{bin}" && cd "{out_dir}" && "{objcopy}" -I binary -O elf64-x86-64 -B i386:x86-64 "{bin}" "$out_abs"'.format(
+        tools = [ctx.executable._objcopy],
+        command = 'out_abs="$PWD/{out}" && objcopy_abs="$PWD/{objcopy}" && cp "{src}" "{out_dir}/{bin}" && cd "{out_dir}" && "$objcopy_abs" -I binary -O elf64-x86-64 -B i386:x86-64 "{bin}" "$out_abs"'.format(
             src = ctx.file.src.path,
             out_dir = out.dirname,
             bin = bin_name,
             out = out.path,
-            objcopy = ctx.attr._objcopy,
+            objcopy = ctx.executable._objcopy.path,
         ),
     )
     return [DefaultInfo(files = depset([out]))]
@@ -26,6 +27,11 @@ embed_binary = rule(
     attrs = {
         "basename": attr.string(mandatory = True),
         "src": attr.label(allow_single_file = True, mandatory = True),
-        "_objcopy": attr.string(default = "/usr/local/opt/llvm/bin/llvm-objcopy"),
+        "_objcopy": attr.label(
+            allow_single_file = True,
+            executable = True,
+            cfg = "exec",
+            default = Label("//toolchain:objcopy.sh"),
+        ),
     },
 )

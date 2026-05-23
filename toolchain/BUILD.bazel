@@ -5,6 +5,35 @@ package(default_visibility = ["//visibility:public"])
 
 filegroup(name = "empty")
 
+exports_files(["objcopy.sh"])
+
+# ── Shared cross-compilation flags ──────────────────────────────────
+
+_CROSS_COMPILE_FLAGS = [
+    "-target", "x86_64-unknown-elf",
+    "-ffreestanding", "-nostdlib",
+    "-std=c++26",
+    "-fno-exceptions", "-fno-rtti",
+    "-Wall", "-Wextra", "-Werror", "-Wno-c99-designator",
+    "-mno-red-zone", "-mno-mmx", "-mno-sse", "-mno-sse2",
+    "-mgeneral-regs-only", "-mcmodel=kernel",
+]
+
+_CROSS_DBG_COMPILE = ["-g", "-O0"]
+
+_CROSS_OPT_COMPILE = ["-O2", "-DNDEBUG"]
+
+_CROSS_CXX_FLAGS = ["-fno-use-cxa-atexit"]
+
+_CROSS_LINK_FLAGS = [
+    "-target", "x86_64-unknown-elf",
+    "-nostdlib", "-nostartfiles", "-ffreestanding",
+    "-Wl,-z,max-page-size=0x1000",
+    "-Wl,-build-id=none",
+]
+
+# ── Cross-compilation toolchain: macOS host ─────────────────────────
+
 cc_toolchain_config(
     name = "x86_64_elf_config",
     compiler = "clang",
@@ -27,46 +56,15 @@ cc_toolchain_config(
         "objdump": "/usr/local/opt/llvm/bin/llvm-objdump",
         "strip": "/usr/local/opt/llvm/bin/llvm-strip",
     },
-    cxx_builtin_include_directories = ["/Library/Developer/CommandLineTools/usr/lib/clang/17/include"],
-    compile_flags = [
-        "-target",
-        "x86_64-unknown-elf",
-        "-ffreestanding",
-        "-nostdlib",
-        "-std=c++26",
-        "-fno-exceptions",
-        "-fno-rtti",
-        "-Wall",
-        "-Wextra",
-        "-Werror",
-        "-Wno-c99-designator",
-        "-mno-red-zone",
-        "-mno-mmx",
-        "-mno-sse",
-        "-mno-sse2",
-        "-mgeneral-regs-only",
-        "-mcmodel=kernel",
+    cxx_builtin_include_directories = [
+        "/Library/Developer/CommandLineTools/usr/lib/clang/17/include",
     ],
-    dbg_compile_flags = [
-        "-g",
-        "-O0",
-    ],
-    opt_compile_flags = [
-        "-O2",
-        "-DNDEBUG",
-    ],
-    cxx_flags = [
-        "-fno-use-cxa-atexit",
-    ],
-    link_flags = [
-        "-target",
-        "x86_64-unknown-elf",
-        "-nostdlib",
-        "-nostartfiles",
-        "-ffreestanding",
+    compile_flags = _CROSS_COMPILE_FLAGS,
+    dbg_compile_flags = _CROSS_DBG_COMPILE,
+    opt_compile_flags = _CROSS_OPT_COMPILE,
+    cxx_flags = _CROSS_CXX_FLAGS,
+    link_flags = _CROSS_LINK_FLAGS + [
         "--ld-path=/usr/local/bin/lld-wrapper.sh",
-        "-Wl,-z,max-page-size=0x1000",
-        "-Wl,-build-id=none",
     ],
     dbg_link_flags = [],
     opt_link_flags = [],
@@ -99,7 +97,72 @@ toolchain(
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
 
-# --- Host (macOS) toolchain for unit tests ---
+# ── Cross-compilation toolchain: Linux host ─────────────────────────
+
+cc_toolchain_config(
+    name = "x86_64_elf_linux_config",
+    compiler = "clang",
+    toolchain_identifier = "x86_64-elf-linux-clang",
+    host_system_name = "x86_64-linux",
+    target_system_name = "x86_64-unknown-elf",
+    target_libc = "unknown",
+    abi_version = "elf",
+    abi_libc_version = "unknown",
+    target_cpu = "x86_64",
+    builtin_sysroot = "/dev/null",
+    tool_paths = {
+        "gcc": "/usr/bin/clang",
+        "g++": "/usr/bin/clang++",
+        "cpp": "/usr/bin/clang++",
+        "ar": "/usr/bin/llvm-ar",
+        "nm": "/usr/bin/llvm-nm",
+        "ld": "/usr/bin/ld.lld",
+        "objcopy": "/usr/bin/llvm-objcopy",
+        "objdump": "/usr/bin/llvm-objdump",
+        "strip": "/usr/bin/llvm-strip",
+    },
+    cxx_builtin_include_directories = [
+        "/usr/lib/clang/17/include",
+    ],
+    compile_flags = _CROSS_COMPILE_FLAGS,
+    dbg_compile_flags = _CROSS_DBG_COMPILE,
+    opt_compile_flags = _CROSS_OPT_COMPILE,
+    cxx_flags = _CROSS_CXX_FLAGS,
+    link_flags = _CROSS_LINK_FLAGS + [
+        "--ld-path=/usr/bin/ld.lld",
+    ],
+    dbg_link_flags = [],
+    opt_link_flags = [],
+)
+
+cc_toolchain(
+    name = "x86_64_elf_linux_cc_toolchain",
+    all_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    supports_param_files = 0,
+    toolchain_config = ":x86_64_elf_linux_config",
+    toolchain_identifier = "x86_64-elf-linux-clang",
+)
+
+toolchain(
+    name = "x86_64_elf_linux_toolchain",
+    exec_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:none",
+    ],
+    toolchain = ":x86_64_elf_linux_cc_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+# ── Host toolchain: macOS (unit tests) ──────────────────────────────
 
 cc_toolchain_config(
     name = "host_config",
@@ -131,9 +194,7 @@ cc_toolchain_config(
     ],
     compile_flags = [
         "-std=c++26",
-        "-Wall",
-        "-Wextra",
-        "-Werror",
+        "-Wall", "-Wextra", "-Werror",
         "-Wno-c99-designator",
         "-Wno-sign-compare",
     ],
@@ -169,5 +230,75 @@ toolchain(
         "@platforms//os:osx",
     ],
     toolchain = ":host_cc_toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+# ── Host toolchain: Linux (unit tests) ──────────────────────────────
+
+cc_toolchain_config(
+    name = "host_linux_config",
+    compiler = "clang",
+    toolchain_identifier = "host-linux-clang",
+    host_system_name = "x86_64-linux",
+    target_system_name = "x86_64-linux",
+    target_libc = "gnu",
+    abi_version = "gnu",
+    abi_libc_version = "gnu",
+    target_cpu = "x86_64",
+    builtin_sysroot = "",
+    tool_paths = {
+        "gcc": "/usr/bin/clang",
+        "g++": "/usr/bin/clang++",
+        "cpp": "/usr/bin/clang++",
+        "ar": "/usr/bin/llvm-ar",
+        "nm": "/usr/bin/llvm-nm",
+        "ld": "/usr/bin/ld.lld",
+        "objcopy": "/usr/bin/llvm-objcopy",
+        "objdump": "/usr/bin/llvm-objdump",
+        "strip": "/usr/bin/llvm-strip",
+    },
+    cxx_builtin_include_directories = [
+        "/usr/lib/clang/17/include",
+        "/usr/include",
+        "/usr/local/include",
+    ],
+    compile_flags = [
+        "-std=c++26",
+        "-Wall", "-Wextra", "-Werror",
+        "-Wno-c99-designator",
+        "-Wno-sign-compare",
+    ],
+    dbg_compile_flags = ["-g", "-O0"],
+    opt_compile_flags = ["-O2", "-DNDEBUG"],
+    cxx_flags = [],
+    link_flags = [],
+    dbg_link_flags = [],
+    opt_link_flags = [],
+)
+
+cc_toolchain(
+    name = "host_linux_cc_toolchain",
+    all_files = ":empty",
+    compiler_files = ":empty",
+    dwp_files = ":empty",
+    linker_files = ":empty",
+    objcopy_files = ":empty",
+    strip_files = ":empty",
+    supports_param_files = 0,
+    toolchain_config = ":host_linux_config",
+    toolchain_identifier = "host-linux-clang",
+)
+
+toolchain(
+    name = "host_linux_toolchain",
+    exec_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    target_compatible_with = [
+        "@platforms//cpu:x86_64",
+        "@platforms//os:linux",
+    ],
+    toolchain = ":host_linux_cc_toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
