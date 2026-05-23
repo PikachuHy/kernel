@@ -38,7 +38,7 @@ static Process* current_process() {
 // ── Syscall handlers ────────────────────────────────────────────
 
 uint64_t sys_debug_print(uint64_t a1, uint64_t, uint64_t, uint64_t) {
-    klog(reinterpret_cast<const char*>(a1));
+    if (a1) klog(reinterpret_cast<const char*>(a1));
     return 0;
 }
 
@@ -308,10 +308,8 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     path = reinterpret_cast<const char*>(a1);
     flags = a2;
 
-    klog("sys_open: path="); klog(path); klog("\n");
     mount = mount_resolve(path);
-    if (!mount) { klog("sys_open: no mount\n"); return INVALID_HANDLE; }
-    klog("sys_open: mount="); klog(mount->path); klog("\n");
+    if (!mount) return INVALID_HANDLE;
 
     // Compute the relative path after the mount prefix
     prefix = mount->path;
@@ -438,16 +436,18 @@ uint64_t sys_blkdev_write(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
 // ── Serial I/O ───────────────────────────────────────────────────
 
 uint64_t sys_serial_read(uint64_t, uint64_t, uint64_t, uint64_t) {
-    uint16_t port = 0x3F8;
     uint8_t byte;
-    asm volatile(
-        "1: movw $0x3FD, %%dx\n"
-        "inb %%dx, %%al\n"
-        "testb $1, %%al\n"
-        "jz 1b\n"
-        "movw $0x3F8, %%dx\n"
-        "inb %%dx, %%al\n"
-        : "=a"(byte) : "d"(port) : "memory");
+    int idle_count = 0;
+    while (true) {
+        asm volatile("inb %1, %0" : "=a"(byte) : "Nd"((uint16_t)0x3FD));
+        if (byte & 1) break;
+        asm volatile("pause" : : : "memory");
+        if (++idle_count >= 100000000) {
+            thread_yield();
+            idle_count = 0;
+        }
+    }
+    asm volatile("inb %1, %0" : "=a"(byte) : "Nd"((uint16_t)0x3F8));
     return byte;
 }
 

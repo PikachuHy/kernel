@@ -22,7 +22,7 @@ static void pc(char c){char s[2]={c,0};p(s);}
 static void rl(char*buf,int mx){
     int i=0;
     while(i<mx-1){char c=getc();
-        if(c=='\r'){pc('\n');buf[i++]='\n';break;}
+        if(c=='\r'||c=='\n'){pc('\n');buf[i++]='\n';break;}
         if(c=='\b'||c==127){if(i>0){i--;pc('\b');p(" ");pc('\b');}continue;}
         if(c<32)continue;
         pc(c);buf[i++]=c;

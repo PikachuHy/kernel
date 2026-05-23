@@ -33,7 +33,8 @@ hdiutil detach "$DISK_DEV" 2>/dev/null
 limine bios-install "$DISK_IMG"
 
 echo "==> Starting QEMU (serial only, no GUI)..."
-echo "    To exit: press Ctrl+A, then X"
+echo "    To exit: Ctrl+A, then X"
+
 echo ""
 
 qemu-system-x86_64 \
@@ -41,6 +42,8 @@ qemu-system-x86_64 \
     -device ahci,id=ahci \
     -device ide-hd,drive=disk,bus=ahci.0 \
     -m 256M \
-    -smp 2 \
-    -nographic \
+    -smp 1 \
+    -display none \
+    -serial stdio \
+    -monitor none \
     -no-reboot

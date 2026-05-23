@@ -91,8 +91,8 @@ void timer_oneshot(uint64_t delay_us, timer_callback_t cb) {
     if (ticks == 0) ticks = 1;
     if (ticks > 0xFFFFFFFF) ticks = 0xFFFFFFFF;
     lapic_write(LAPIC_TIMER_DIV, LAPIC_DIV);
-    lapic_timer_unmask(TIMER_VEC, false);
     lapic_write(LAPIC_TIMER_INIT, static_cast<uint32_t>(ticks));
+    lapic_timer_unmask(TIMER_VEC, false);
 }
 
 void timer_periodic(uint64_t interval_us, timer_callback_t cb) {

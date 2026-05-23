@@ -10,7 +10,6 @@ using uint16_t = unsigned short;
 using size_t = decltype(sizeof(0));
 
 // ── Syscall numbers ──────────────────────────────────────────────
-constexpr int SYS_DEBUG_PRINT     = 0;
 constexpr int SYS_HANDLE_CLOSE    = 1;
 constexpr int SYS_CHANNEL_WRITE   = 11;
 constexpr int SYS_CHANNEL_READ    = 12;
@@ -41,18 +40,6 @@ static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
         : "=r"(ret) : "r"(num), "r"(a1), "r"(a2), "r"(a3), "r"(a4), "r"(a5)
         : "rax", "rdi", "rsi", "rdx", "r10", "r8", "rcx", "r11", "memory");
     return ret;
-}
-static void debug(const char* m) { syscall6(SYS_DEBUG_PRINT, (uint64_t)m, 0, 0, 0, 0); }
-static void debug_hex(uint64_t n) {
-    char b[20] = "0x0000000000000000\n";
-    for (int i = 17; i > 1; i--) { uint8_t d = n & 0xF; b[i] = d < 10 ? '0' + d : 'A' + d - 10; n >>= 4; }
-    debug(b);
-}
-static void debug_dec(uint64_t n) {
-    if (n == 0) { debug("0"); return; }
-    char b[21]; int i = 20; b[i--] = '\0';
-    while (n > 0 && i >= 0) { b[i--] = '0' + (n % 10); n /= 10; }
-    debug(&b[i + 1]);
 }
 // Static WA struct — avoids stack corruption in deep call chains.
 static struct { const void* d; size_t sz; const uint32_t* hnd; size_t n; } s_wa;
@@ -357,17 +344,16 @@ static void handle_file(uint32_t ch, uint32_t start, uint32_t size, bool is_dir)
 // ── Entry point ───────────────────────────────────────────────────
 extern "C" void _start() {
     const uint32_t MC = 1;
-    debug("FAT32: starting...\n");
 
     uint32_t h = (uint32_t)syscall6(SYS_OPEN, (uint64_t)"/dev/ahci0", O_RDONLY, 0, 0, 0);
-    if (h == 0 || h == 0xFFFFFFFF) { debug("FAT32: no /dev/ahci0\n"); goto exit; }
+    if (h == 0 || h == 0xFFFFFFFF) { goto exit; }
     s_bdev = h;
 
     // MBR → find partition
     {
         uint8_t mbr[512];
         s_part_base = 0;
-        if (read_sectors(0, mbr, 1) != 0) { debug("FAT32: MBR fail\n"); goto exit; }
+        if (read_sectors(0, mbr, 1) != 0) { goto exit; }
         s_part_base = 0;
         for (int e = 0; e < 4; e++) {
             uint8_t* en = mbr + 446 + e * 16;
@@ -376,30 +362,19 @@ extern "C" void _start() {
                 break;
             }
         }
-        if (s_part_base == 0) { debug("FAT32: no part, using LBA 63\n"); s_part_base = 63; }
+        if (s_part_base == 0) { s_part_base = 63; }
     }
 
     // BPB
     uint8_t bpb_sec[512];
-    if (read_sectors(0, bpb_sec, 1) != 0) { debug("FAT32: BPB fail\n"); goto exit; }
+    if (read_sectors(0, bpb_sec, 1) != 0) { goto exit; }
     {
         Bpb* b = (Bpb*)bpb_sec;
         s_bps = b->bytes_per_sector; s_spc = b->sectors_per_cluster;
         s_rsvd = b->reserved_sectors; s_spf = b->sectors_per_fat_32;
         s_root = b->root_cluster;
-        debug("FAT32: BPB ok\n  bps="); debug_dec(s_bps);
-        debug(" spc="); debug_dec(s_spc);
-        debug(" rsvd="); debug_dec(s_rsvd);
-        debug(" spf="); debug_dec(s_spf);
-        debug(" root="); debug_hex(s_root); debug("\n");
-
         s_fat_lba = s_rsvd;
         s_data_lba = s_fat_lba + (uint64_t)b->num_fats * s_spf;
-        uint64_t ts = b->total_sectors_16 ? b->total_sectors_16 : b->total_sectors_32;
-        debug("  total="); debug_dec(ts);
-        debug(" data_lba="); debug_hex(s_data_lba);
-        debug(" clusters="); debug_hex((ts - s_data_lba) / s_spc);
-        debug("\nFAT32: ready\n");
     }
 
     // Mount-channel event loop
@@ -408,25 +383,21 @@ extern "C" void _start() {
         int rc = ch_read(MC, buf, sizeof(buf));
         if (rc < 0) break;
         OpenPayload* p = (OpenPayload*)buf;
-        debug("FAT32: open '"); debug(p->path); debug("'\n");
 
         uint32_t sz; bool isd;
         uint32_t cl = fat32_open(p->path, &sz, &isd);
         if (!cl) {
-            debug("  not found\n");
             FileResponse err = {-1, 0};
             ch_write(p->file_handle, &err, sizeof(err));
             ch_close(p->file_handle);
             continue;
         }
-        debug("  found size="); debug_dec(sz); debug(isd ? " dir\n" : "\n");
         FileResponse ok = {0, sz};
         ch_write(p->file_handle, &ok, sizeof(ok));
         handle_file(p->file_handle, cl, sz, isd);
     }
 
 exit:
-    debug("FAT32: exit\n");
     ch_close(s_bdev);
     syscall6(SYS_PROCESS_EXIT, 0, 0, 0, 0, 0);
     while (1) { asm volatile("hlt"); }
