@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//toolchain:embed_binary.bzl", "embed_binary")
 
 cc_binary(
     name = "init_elf",
@@ -12,18 +13,9 @@ cc_binary(
     visibility = ["//visibility:private"],
 )
 
-# Convert the init ELF binary into a linkable ELF object so the kernel
-# can embed it.  We copy the file to a short, clean name first (init.bin)
-# so that llvm-objcopy creates predictable symbols:
-#   _binary_init_bin_start, _binary_init_bin_end, _binary_init_bin_size.
-genrule(
+embed_binary(
     name = "init_embed",
-    srcs = [":init_elf"],
-    outs = ["init_embed.o"],
-    cmd = "cp $(SRCS) $(@D)/init.bin && " +
-          "cd $(@D) && " +
-          "/usr/local/opt/llvm/bin/llvm-objcopy " +
-          "-I binary -O elf64-x86-64 -B i386:x86-64 " +
-          "init.bin $$PWD/init_embed.o",
+    src = ":init_elf",
+    basename = "init",
     visibility = ["//visibility:public"],
 )

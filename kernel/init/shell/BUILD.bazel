@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//toolchain:embed_binary.bzl", "embed_binary")
 
 cc_binary(
     name = "shell_elf",
@@ -12,14 +13,9 @@ cc_binary(
     visibility = ["//visibility:private"],
 )
 
-genrule(
+embed_binary(
     name = "shell_embed",
-    srcs = [":shell_elf"],
-    outs = ["shell_embed.o"],
-    cmd = "cp $(SRCS) $(@D)/shell.bin && " +
-          "cd $(@D) && " +
-          "/usr/local/opt/llvm/bin/llvm-objcopy " +
-          "-I binary -O elf64-x86-64 -B i386:x86-64 " +
-          "shell.bin $$PWD/shell_embed.o",
+    src = ":shell_elf",
+    basename = "shell",
     visibility = ["//visibility:public"],
 )

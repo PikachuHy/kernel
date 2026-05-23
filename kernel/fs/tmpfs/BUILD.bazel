@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//toolchain:embed_binary.bzl", "embed_binary")
 
 cc_binary(
     name = "tmpfs_elf",
@@ -12,14 +13,9 @@ cc_binary(
     visibility = ["//visibility:private"],
 )
 
-genrule(
+embed_binary(
     name = "tmpfs_embed",
-    srcs = [":tmpfs_elf"],
-    outs = ["tmpfs_embed.o"],
-    cmd = "cp $(SRCS) $(@D)/tmpfs.bin && " +
-          "cd $(@D) && " +
-          "/usr/local/opt/llvm/bin/llvm-objcopy " +
-          "-I binary -O elf64-x86-64 -B i386:x86-64 " +
-          "tmpfs.bin $$PWD/tmpfs_embed.o",
+    src = ":tmpfs_elf",
+    basename = "tmpfs",
     visibility = ["//visibility:public"],
 )

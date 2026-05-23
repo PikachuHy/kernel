@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//toolchain:embed_binary.bzl", "embed_binary")
 
 cc_binary(
     name = "fat32_elf",
@@ -12,14 +13,9 @@ cc_binary(
     visibility = ["//visibility:private"],
 )
 
-genrule(
+embed_binary(
     name = "fat32_embed",
-    srcs = [":fat32_elf"],
-    outs = ["fat32_embed.o"],
-    cmd = "cp $(SRCS) $(@D)/fat32.bin && " +
-          "cd $(@D) && " +
-          "/usr/local/opt/llvm/bin/llvm-objcopy " +
-          "-I binary -O elf64-x86-64 -B i386:x86-64 " +
-          "fat32.bin $$PWD/fat32_embed.o",
+    src = ":fat32_elf",
+    basename = "fat32",
     visibility = ["//visibility:public"],
 )

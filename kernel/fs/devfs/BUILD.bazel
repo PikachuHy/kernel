@@ -1,4 +1,5 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//toolchain:embed_binary.bzl", "embed_binary")
 
 cc_binary(
     name = "devfs_elf",
@@ -12,14 +13,9 @@ cc_binary(
     visibility = ["//visibility:private"],
 )
 
-genrule(
+embed_binary(
     name = "devfs_embed",
-    srcs = [":devfs_elf"],
-    outs = ["devfs_embed.o"],
-    cmd = "cp $(SRCS) $(@D)/devfs.bin && " +
-          "cd $(@D) && " +
-          "/usr/local/opt/llvm/bin/llvm-objcopy " +
-          "-I binary -O elf64-x86-64 -B i386:x86-64 " +
-          "devfs.bin $$PWD/devfs_embed.o",
+    src = ":devfs_elf",
+    basename = "devfs",
     visibility = ["//visibility:public"],
 )
