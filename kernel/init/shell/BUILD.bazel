@@ -1,33 +1,20 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
-genrule(
+cc_binary(
     name = "shell_elf",
-    srcs = [
-        "shell.cpp",
-        "shell.ld",
+    srcs = ["shell.cpp"],
+    additional_linker_inputs = ["shell.ld"],
+    copts = [
+        "-mcmodel=small",
+        "-O2",
     ],
-    outs = ["shell.elf"],
-    cmd = "/usr/bin/clang++ " +
-          "-target x86_64-unknown-elf " +
-          "-ffreestanding -nostdlib " +
-          "-std=c++26 " +
-          "-fno-exceptions -fno-rtti " +
-          "-Wall -Wextra -Werror " +
-          "-O2 " +
-          "-mno-sse -mno-sse2 -mgeneral-regs-only " +
-          "-mcmodel=small " +
-          "-T $(location shell.ld) " +
-          "-o $@ " +
-          "$(location shell.cpp) " +
-          "-Wl,-z,max-page-size=0x1000 " +
-          "-static " +
-          "--ld-path=/usr/local/bin/lld-wrapper.sh",
+    linkopts = ["-T", "$(location shell.ld)"],
     visibility = ["//visibility:private"],
 )
 
 genrule(
     name = "shell_embed",
-    srcs = [":shell.elf"],
+    srcs = [":shell_elf"],
     outs = ["shell_embed.o"],
     cmd = "cp $(SRCS) $(@D)/shell.bin && " +
           "cd $(@D) && " +

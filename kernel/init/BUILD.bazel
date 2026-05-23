@@ -1,31 +1,14 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
-# The init ELF — cross-compiled for x86-64 freestanding user-space.
-# This runs in ring 3 at 0x400000, so we use -mcmodel=small (not kernel).
-# We compile with clang++ directly (not the Bazel CC toolchain) to avoid
-# kernel-specific flags like -mno-red-zone, -mno-sse, -mcmodel=kernel.
-genrule(
+cc_binary(
     name = "init_elf",
-    srcs = [
-        "init.cpp",
-        "init.ld",
+    srcs = ["init.cpp"],
+    additional_linker_inputs = ["init.ld"],
+    copts = [
+        "-mcmodel=small",
+        "-O2",
     ],
-    outs = ["init.elf"],
-    cmd = "/usr/bin/clang++ " +
-          "-target x86_64-unknown-elf " +
-          "-ffreestanding -nostdlib " +
-          "-std=c++26 " +
-          "-fno-exceptions -fno-rtti " +
-          "-Wall -Wextra -Werror " +
-          "-O2 " +
-          "-mno-sse -mno-sse2 -mgeneral-regs-only " +
-          "-mcmodel=small " +
-          "-T $(location init.ld) " +
-          "-o $@ " +
-          "$(location init.cpp) " +
-          "-Wl,-z,max-page-size=0x1000 " +
-          "-static " +
-          "--ld-path=/usr/local/bin/lld-wrapper.sh",
+    linkopts = ["-T", "$(location init.ld)"],
     visibility = ["//visibility:private"],
 )
 
@@ -35,7 +18,7 @@ genrule(
 #   _binary_init_bin_start, _binary_init_bin_end, _binary_init_bin_size.
 genrule(
     name = "init_embed",
-    srcs = [":init.elf"],
+    srcs = [":init_elf"],
     outs = ["init_embed.o"],
     cmd = "cp $(SRCS) $(@D)/init.bin && " +
           "cd $(@D) && " +

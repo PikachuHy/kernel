@@ -1,30 +1,20 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
-genrule(
+cc_binary(
     name = "devfs_elf",
-    srcs = ["devfs.cpp", "devfs.ld"],
-    outs = ["devfs.elf"],
-    cmd = "/usr/bin/clang++ " +
-          "-target x86_64-unknown-elf " +
-          "-ffreestanding -nostdlib " +
-          "-std=c++26 " +
-          "-fno-exceptions -fno-rtti " +
-          "-Wall -Wextra -Werror " +
-          "-O2 " +
-          "-mno-sse -mno-sse2 -mgeneral-regs-only " +
-          "-mcmodel=small " +
-          "-T $(location devfs.ld) " +
-          "-o $@ " +
-          "$(location devfs.cpp) " +
-          "-Wl,-z,max-page-size=0x1000 " +
-          "-static " +
-          "--ld-path=/usr/local/bin/lld-wrapper.sh",
+    srcs = ["devfs.cpp"],
+    additional_linker_inputs = ["devfs.ld"],
+    copts = [
+        "-mcmodel=small",
+        "-O2",
+    ],
+    linkopts = ["-T", "$(location devfs.ld)"],
     visibility = ["//visibility:private"],
 )
 
 genrule(
     name = "devfs_embed",
-    srcs = [":devfs.elf"],
+    srcs = [":devfs_elf"],
     outs = ["devfs_embed.o"],
     cmd = "cp $(SRCS) $(@D)/devfs.bin && " +
           "cd $(@D) && " +
