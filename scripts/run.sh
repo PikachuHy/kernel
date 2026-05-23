@@ -3,7 +3,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-LIMINE_DIR="$(brew --prefix limine)/share/limine"
+
+# Detect platform
+case "$(uname)" in
+    Darwin) PLATFORM="macos" ;;
+    Linux)  PLATFORM="linux" ;;
+    *)
+        echo "Unsupported platform: $(uname)" >&2
+        exit 1
+        ;;
+esac
+
+source "${SCRIPT_DIR}/lib/disk_${PLATFORM}.sh"
 
 cd "$ROOT_DIR"
 
@@ -13,28 +24,10 @@ bazel build //kernel:kernel
 KERNEL_ELF="$ROOT_DIR/bazel-bin/kernel/kernel"
 DISK_IMG="$ROOT_DIR/build/kernel.img"
 
-echo "==> Creating bootable disk image..."
-rm -f "$DISK_IMG"
-dd if=/dev/zero of="$DISK_IMG" bs=1M count=64 2>/dev/null
-
-# Create FAT32 partition with MBR
-DISK_DEV=$(hdiutil attach -imagekey diskimage-class=CRawDiskImage -nomount "$DISK_IMG" 2>/dev/null | awk '{print $1}')
-diskutil partitionDisk "$DISK_DEV" 1 MBR "MS-DOS FAT32" "KERNEL" 100% 2>/dev/null
-
-# Copy kernel, config, and Limine files
-MOUNT_POINT="/Volumes/KERNEL"
-cp "$KERNEL_ELF" "$MOUNT_POINT/kernel.elf"
-cp "$ROOT_DIR/limine.conf" "$MOUNT_POINT/limine.conf"
-cp "$LIMINE_DIR/limine-bios.sys" "$MOUNT_POINT/"
-
-hdiutil detach "$DISK_DEV" 2>/dev/null
-
-# Install Limine BIOS bootloader
-limine bios-install "$DISK_IMG"
+disk_create "$DISK_IMG" "$KERNEL_ELF" "$ROOT_DIR/limine.conf"
 
 echo "==> Starting QEMU (serial only, no GUI)..."
 echo "    To exit: Ctrl+A, then X"
-
 echo ""
 
 qemu-system-x86_64 \
@@ -47,4 +40,4 @@ qemu-system-x86_64 \
     -serial stdio \
     -monitor none \
     -no-reboot \
-	    -device isa-debug-exit,iobase=0xf4,iosize=0x04
+    -device isa-debug-exit,iobase=0xf4,iosize=0x04

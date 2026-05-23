@@ -35,7 +35,7 @@ static uint8_t boot_stack[65536];
 // ── Limine requests ──────────────────────────────────────────
 static volatile struct limine_framebuffer_request framebuffer_request = {
     .id = {LIMINE_COMMON_MAGIC, LIMINE_FRAMEBUFFER_REQUEST_ID},
-    .revision = 0, .response = nullptr,
+    .revision = 0, .response = nullptr, .width = 0, .height = 0, .bpp = 0, .unused = 0,
 };
 
 static volatile struct limine_bootloader_info_request bootloader_info_request = {
