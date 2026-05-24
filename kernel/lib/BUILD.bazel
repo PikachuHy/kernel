@@ -21,3 +21,18 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
 )
+
+cc_library(
+    name = "utils",
+    hdrs = [
+        "result.hpp",
+        "scoped_lock.hpp",
+        "scoped_mem.hpp",
+        "bitwise.hpp",
+        "user_types.hpp",
+    ],
+    deps = [
+        ":klib",
+    ],
+    visibility = ["//visibility:public"],
+)
