@@ -23,7 +23,7 @@ cc_library(
 )
 
 cc_library(
-    name = "utils",
+    name = "kstd",
     hdrs = [
         "result.hpp",
         "scoped_lock.hpp",

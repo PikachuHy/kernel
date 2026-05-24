@@ -10,7 +10,7 @@ cc_binary(
         "-O2",
     ],
     linkopts = ["-T", "$(location init.ld)"],
-    deps = ["//kernel/lib:utils"],
+    deps = ["//kernel/lib:kstd"],
     visibility = ["//visibility:private"],
 )
 

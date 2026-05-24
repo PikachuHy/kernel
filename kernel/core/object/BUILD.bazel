@@ -11,7 +11,7 @@ cc_library(
         "//kernel/core/mm:vmm",
         "//kernel/core/sched:sched_hdrs",
         "//kernel/lib:klib",
-        "//kernel/lib:utils",
+        "//kernel/lib:kstd",
     ],
     visibility = ["//visibility:public"],
 )
@@ -19,6 +19,6 @@ cc_library(
 cc_library(
     name = "object_hdrs",
     hdrs = ["object.hpp", "rights.hpp", "handle_table.hpp", "channel.hpp", "port.hpp", "process.hpp"],
-    deps = ["//kernel/lib:utils"],
+    deps = ["//kernel/lib:kstd"],
     visibility = ["//visibility:public"],
 )
