@@ -4,47 +4,47 @@
 namespace x86 {
 
 /// MMIO read/write helpers — phys address + HHDM offset
-inline uint32_t mmio_read32(uint64_t hhdm, uint64_t phys) {
+inline auto mmio_read32(uint64_t hhdm, uint64_t phys) noexcept -> uint32_t {
     volatile uint32_t* ptr = reinterpret_cast<volatile uint32_t*>(hhdm + phys);
     return *ptr;
 }
 
-inline void mmio_write32(uint64_t hhdm, uint64_t phys, uint32_t value) {
+inline auto mmio_write32(uint64_t hhdm, uint64_t phys, uint32_t value) noexcept -> void {
     volatile uint32_t* ptr = reinterpret_cast<volatile uint32_t*>(hhdm + phys);
     *ptr = value;
 }
 
 /// I/O port helpers
-inline void outb(uint16_t port, uint8_t value) {
+inline auto outb(uint16_t port, uint8_t value) noexcept -> void {
     asm volatile("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
-inline uint8_t inb(uint16_t port) {
+inline auto inb(uint16_t port) noexcept -> uint8_t {
     uint8_t result;
     asm volatile("inb %1, %0" : "=a"(result) : "Nd"(port));
     return result;
 }
 
-inline void outw(uint16_t port, uint16_t value) {
+inline auto outw(uint16_t port, uint16_t value) noexcept -> void {
     asm volatile("outw %0, %1" : : "a"(value), "Nd"(port));
 }
 
-inline uint16_t inw(uint16_t port) {
+inline auto inw(uint16_t port) noexcept -> uint16_t {
     uint16_t result;
     asm volatile("inw %1, %0" : "=a"(result) : "Nd"(port));
     return result;
 }
 
-inline void outl(uint16_t port, uint32_t value) {
+inline auto outl(uint16_t port, uint32_t value) noexcept -> void {
     asm volatile("outl %0, %1" : : "a"(value), "Nd"(port));
 }
 
-inline uint32_t inl(uint16_t port) {
+inline auto inl(uint16_t port) noexcept -> uint32_t {
     uint32_t result;
     asm volatile("inl %1, %0" : "=a"(result) : "Nd"(port));
     return result;
 }
 
-inline void pause() { asm volatile("pause"); }
+inline auto pause() noexcept -> void { asm volatile("pause"); }
 
 } // namespace x86

@@ -26,53 +26,53 @@ struct alignas(PAGE_SIZE) PageTable {
     uint64_t entries[PAGE_TABLE_ENTRIES];
 };
 
-inline constexpr uint16_t pml4_index(uint64_t va) { return (va >> 39) & 0x1FF; }
-inline constexpr uint16_t pdpt_index(uint64_t va) { return (va >> 30) & 0x1FF; }
-inline constexpr uint16_t pd_index(uint64_t va)   { return (va >> 21) & 0x1FF; }
-inline constexpr uint16_t pt_index(uint64_t va)   { return (va >> 12) & 0x1FF; }
+inline auto pml4_index(uint64_t va) noexcept -> uint16_t { return (va >> 39) & 0x1FF; }
+inline auto pdpt_index(uint64_t va) noexcept -> uint16_t { return (va >> 30) & 0x1FF; }
+inline auto pd_index(uint64_t va) noexcept -> uint16_t   { return (va >> 21) & 0x1FF; }
+inline auto pt_index(uint64_t va) noexcept -> uint16_t   { return (va >> 12) & 0x1FF; }
 
 constexpr uint64_t DIRECT_MAP_BASE = 0xFFFF800000000000ULL;
 constexpr uint64_t KERNEL_VIRT_BASE = 0xFFFFFFFF80000000ULL;
 
-inline void* phys_to_virt(uint64_t phys_addr) {
+inline auto phys_to_virt(uint64_t phys_addr) noexcept -> void* {
     return reinterpret_cast<void*>(DIRECT_MAP_BASE + phys_addr);
 }
 
-inline uint64_t virt_to_phys(const void* virt_addr) {
+inline auto virt_to_phys(const void* virt_addr) noexcept -> uint64_t {
     return reinterpret_cast<uint64_t>(virt_addr) - DIRECT_MAP_BASE;
 }
 
 // Take over paging: create new page tables with kernel and direct map.
 // hhdm: Limine HHDM offset for transitional phys-to-virt during setup.
-void paging_init(
+auto paging_init(
     uint64_t hhdm,
     uint64_t kernel_phys_base,
     uint64_t kernel_virt_base,
-    uint64_t kernel_size);
+    uint64_t kernel_size) -> void;
 
 // Save the kernel-half PML4 entries (indices 256-511) as a template
 // for new process address spaces. Call after paging_init succeeds.
-void paging_save_kernel_template();
+auto paging_save_kernel_template() -> void;
 
 // Returns the saved kernel PML4 template (physical address).
-uint64_t paging_kernel_pml4_template();
+auto paging_kernel_pml4_template() -> uint64_t;
 
 // Walk the page table for `va` in the given PML4, creating intermediate
 // tables as needed via bitmap_alloc_page. Installs `pa | flags` as the
 // leaf PTE. Returns true on success, false on allocation failure.
-bool page_table_map(uint64_t pml4_phys, uint64_t va, uint64_t pa, uint64_t flags);
+auto page_table_map(uint64_t pml4_phys, uint64_t va, uint64_t pa, uint64_t flags) -> bool;
 
 // Unmap a 4K page. Returns the physical address that was mapped, or 0.
-uint64_t page_table_unmap(uint64_t pml4_phys, uint64_t va);
+auto page_table_unmap(uint64_t pml4_phys, uint64_t va) -> uint64_t;
 
 // Look up the physical address mapped at `va` in the given PML4.
 // Returns 0 if not mapped.
-uint64_t page_table_lookup(uint64_t pml4_phys, uint64_t va);
+auto page_table_lookup(uint64_t pml4_phys, uint64_t va) -> uint64_t;
 
-inline constexpr uint64_t make_pte(uint64_t phys_addr, uint64_t flags) {
+inline constexpr auto make_pte(uint64_t phys_addr, uint64_t flags) noexcept -> uint64_t {
     return (phys_addr & ~(PAGE_SIZE - 1)) | flags;
 }
 
-inline constexpr uint64_t pte_phys_addr(uint64_t entry) {
+inline constexpr auto pte_phys_addr(uint64_t entry) noexcept -> uint64_t {
     return entry & ~(PAGE_SIZE - 1);
 }

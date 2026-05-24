@@ -45,15 +45,15 @@ constexpr uint16_t PIC2_DATA = 0xA1;
 // IRQ->vector mapping: ISA IRQs start at vector 32
 constexpr uint8_t IRQ_BASE_VECTOR = 32;
 
-void lapic_init(uint64_t hhdm);
-void lapic_eoi();
-uint32_t lapic_read(uint16_t offset);
-void lapic_write(uint16_t offset, uint32_t value);
-void lapic_send_ipi(uint32_t lapic_id, uint32_t icr_lo);
-void lapic_send_init(uint32_t lapic_id);
-void lapic_send_sipi(uint32_t lapic_id, uint8_t vector);
-bool apic_is_ready();
+auto lapic_init(uint64_t hhdm) -> void;
+auto lapic_eoi() -> void;
+auto lapic_read(uint16_t offset) -> uint32_t;
+auto lapic_write(uint16_t offset, uint32_t value) -> void;
+auto lapic_send_ipi(uint32_t lapic_id, uint32_t icr_lo) -> void;
+auto lapic_send_init(uint32_t lapic_id) -> void;
+auto lapic_send_sipi(uint32_t lapic_id, uint8_t vector) -> void;
+auto apic_is_ready() -> bool;
 
-void ioapic_init(uint64_t hhdm);
-void ioapic_route_irq(uint8_t irq, uint8_t vector, uint8_t lapic_id);
-void pic_disable();
+auto ioapic_init(uint64_t hhdm) -> void;
+auto ioapic_route_irq(uint8_t irq, uint8_t vector, uint8_t lapic_id) -> void;
+auto pic_disable() -> void;

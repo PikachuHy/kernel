@@ -65,8 +65,8 @@ struct CpuInfo {
 // Walk RSDP -> XSDT(or RSDT) -> find MADT.
 // Returns 0 on success, <0 on error.
 // out_madt points to the MADT (accessible via HHDM).
-int acpi_find_madt(uint64_t hhdm, uint64_t rsdp_phys, const MADT** out_madt);
+auto acpi_find_madt(uint64_t hhdm, uint64_t rsdp_phys, const MADT** out_madt) -> int;
 
 // Parse MADT entries to enumerate Local APICs.
 // Returns number of CPUs found.
-int acpi_parse_cpus(const MADT* madt, CpuInfo* cpus, int max_cpus);
+auto acpi_parse_cpus(const MADT* madt, CpuInfo* cpus, int max_cpus) -> int;

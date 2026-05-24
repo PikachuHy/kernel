@@ -16,14 +16,14 @@ constexpr uint8_t PCI_SUBCLASS_SATA   = 0x06;
 constexpr uint8_t PCI_SUBCLASS_NVME   = 0x08;
 
 // Returns 0xFFFFFFFF if device not present.
-uint32_t pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset);
-uint16_t pci_config_read16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset);
+auto pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) -> uint32_t;
+auto pci_config_read16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) -> uint16_t;
 
 // Enumerate all PCI devices, populate internal list.
-void pci_init();
+auto pci_init() -> void;
 
 // Iterator
-PciDevice* pci_first_device();
+auto pci_first_device() -> PciDevice*;
 
 // Find first device matching class/subclass, or nullptr.
-PciDevice* pci_find_by_class(uint8_t class_code, uint8_t subclass);
+auto pci_find_by_class(uint8_t class_code, uint8_t subclass) -> PciDevice*;

@@ -16,8 +16,8 @@ struct Spinlock {
     uint8_t locked;  // 0=free, 1=held
 };
 
-void spinlock_acquire(Spinlock* lock);
-void spinlock_release(Spinlock* lock);
+auto spinlock_acquire(Spinlock* lock) -> void;
+auto spinlock_release(Spinlock* lock) -> void;
 
 struct ScopedSpinlock {
     Spinlock* lock;
@@ -25,9 +25,9 @@ struct ScopedSpinlock {
     ~ScopedSpinlock() { spinlock_release(lock); }
 
     ScopedSpinlock(const ScopedSpinlock&) = delete;
-    ScopedSpinlock& operator=(const ScopedSpinlock&) = delete;
+    auto operator=(const ScopedSpinlock&) -> ScopedSpinlock& = delete;
     ScopedSpinlock(ScopedSpinlock&&) = delete;
-    ScopedSpinlock& operator=(ScopedSpinlock&&) = delete;
+    auto operator=(ScopedSpinlock&&) -> ScopedSpinlock& = delete;
 };
 
 // Global per-CPU array
@@ -38,10 +38,10 @@ extern uint32_t g_cpu_count;
 // hhdm: Limine HHDM offset for physical memory access
 // rsdp_phys: physical address of ACPI RSDP (from Limine rsdp_request)
 // Returns number of CPUs successfully brought online (including BSP).
-uint32_t smp_init(uint64_t hhdm, uint64_t rsdp_phys);
+auto smp_init(uint64_t hhdm, uint64_t rsdp_phys) -> uint32_t;
 
-uint32_t smp_cpu_count();
+auto smp_cpu_count() -> uint32_t;
 
 // AP entry point (called from trampoline after long-mode transition).
 // id = cpu_id | (lapic_id << 32).  Defined in smp.cpp (Task 4+).
-extern "C" void smp_ap_entry(uint64_t id);
+extern "C" auto smp_ap_entry(uint64_t id) -> void;

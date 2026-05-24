@@ -17,6 +17,6 @@ struct GDTR {
     uint64_t base;
 } __attribute__((packed));
 
-void gdt_init();
-void tss_init();
-void tss_set_rsp0(uint64_t rsp0);
+auto gdt_init() -> void;
+auto tss_init() -> void;
+auto tss_set_rsp0(uint64_t rsp0) -> void;
