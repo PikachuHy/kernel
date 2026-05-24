@@ -1,5 +1,8 @@
 #include "kernel/core/object/channel.hpp"
 #include "kernel/core/mm/slab.hpp"
+#include <new>
+#include "kernel/lib/scoped_mem.hpp"
+#include "kernel/lib/bitwise.hpp"
 
 auto Channel::Enqueue(Message* msg, Message** head, Message** tail) -> void {
     msg->next = nullptr;
@@ -22,43 +25,43 @@ auto Channel::Dequeue(Message** head, Message** tail) -> Channel::Message* {
 auto Channel::Write(const void* data, size_t len,
                     const handle_t* handles, size_t num_handles,
                     bool from_endpoint_b) -> int {
-    auto* msg = static_cast<Message*>(kmalloc(sizeof(Message)));
-    if (!msg) return -1;
+    auto* raw = static_cast<Message*>(kmalloc(sizeof(Message)));
+    if (!raw) return -1;
 
-    msg->data = nullptr;
-    msg->handles = nullptr;
-    msg->data_len = len;
-    msg->num_handles = num_handles;
+    // Placement-new construct Message in allocated memory
+    new (raw) Message{};
+
+    raw->data_len = len;
+    raw->num_handles = num_handles;
 
     if (len > 0) {
-        msg->data = static_cast<uint8_t*>(kmalloc(len));
-        if (!msg->data) { kfree(msg); return -1; }
-        for (size_t i = 0; i < len; i++) {
-            msg->data[i] = static_cast<const uint8_t*>(data)[i];
+        auto* buf = static_cast<uint8_t*>(kmalloc(len));
+        if (!buf) {
+            raw->~Message();
+            kfree(raw);
+            return -1;
         }
+        raw->data_mem = km::ScopedMem{buf};
+        km::copy_bytes(buf, static_cast<const uint8_t*>(data), len);
     }
 
     if (num_handles > 0) {
-        msg->handles = static_cast<handle_t*>(
-            kmalloc(sizeof(handle_t) * num_handles));
-        if (!msg->handles) {
-            if (msg->data) kfree(msg->data);
-            kfree(msg);
+        auto* hbuf = static_cast<handle_t*>(kmalloc(sizeof(handle_t) * num_handles));
+        if (!hbuf) {
+            raw->~Message();
+            kfree(raw);
             return -1;
         }
-        for (size_t i = 0; i < num_handles; i++) {
-            msg->handles[i] = handles[i];
-        }
+        raw->handle_mem = km::ScopedMem{hbuf};
+        raw->handles = hbuf;
+        km::copy_bytes(hbuf, handles, num_handles);
     }
 
-    // Route: A writes → B's rx queue (queue_b_), B writes → A's rx queue (queue_a_)
     lock_.lock();
-    if (from_endpoint_b) {
-        Enqueue(msg, &head_a_, &tail_a_);
-    } else {
-        Enqueue(msg, &head_b_, &tail_b_);
-    }
+    if (from_endpoint_b) Enqueue(raw, &head_a_, &tail_a_);
+    else                 Enqueue(raw, &head_b_, &tail_b_);
     lock_.unlock();
+
     return 0;
 }
 
@@ -67,33 +70,29 @@ auto Channel::Read(void* buf, size_t buf_size, size_t* out_len,
                    size_t* out_num_handles,
                    bool from_endpoint_b) -> int {
     lock_.lock();
-    Message* msg = from_endpoint_b
-        ? Dequeue(&head_b_, &tail_b_)   // B reads from queue_b_ (messages from A)
-        : Dequeue(&head_a_, &tail_a_);  // A reads from queue_a_ (messages from B)
+    auto* msg = from_endpoint_b
+        ? Dequeue(&head_b_, &tail_b_)
+        : Dequeue(&head_a_, &tail_a_);
     lock_.unlock();
 
     if (!msg) return -2;
 
     if (out_len) *out_len = msg->data_len;
 
-    if (buf && msg->data && msg->data_len > 0) {
-        size_t copy = msg->data_len < buf_size ? msg->data_len : buf_size;
-        for (size_t i = 0; i < copy; i++) {
-            static_cast<uint8_t*>(buf)[i] = msg->data[i];
-        }
+    if (buf && msg->data_mem.get() && msg->data_len > 0) {
+        auto copy_len = msg->data_len < buf_size ? msg->data_len : buf_size;
+        km::copy_bytes(static_cast<uint8_t*>(buf),
+                       static_cast<const uint8_t*>(msg->data_mem.get()), copy_len);
     }
 
     if (out_num_handles) *out_num_handles = msg->num_handles;
     if (handle_buf && msg->handles && msg->num_handles > 0) {
-        size_t copy = msg->num_handles < buf_capacity
-                          ? msg->num_handles : buf_capacity;
-        for (size_t i = 0; i < copy; i++) {
-            handle_buf[i] = msg->handles[i];
-        }
+        auto copy_len = msg->num_handles < buf_capacity ? msg->num_handles : buf_capacity;
+        km::copy_bytes(handle_buf, msg->handles, copy_len);
     }
 
-    if (msg->data) kfree(msg->data);
-    if (msg->handles) kfree(msg->handles);
+    // ScopedMem destructors in ~Message() free data and handle buffers
+    msg->~Message();
     kfree(msg);
     return 0;
 }

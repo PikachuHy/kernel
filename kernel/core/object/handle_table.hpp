@@ -3,6 +3,7 @@
 #include "kernel/core/object/object.hpp"
 #include "kernel/core/object/rights.hpp"
 #include "kernel/lib/spinlock.hpp"
+#include "kernel/lib/result.hpp"
 
 using handle_t = uint32_t;
 constexpr handle_t INVALID_HANDLE = 0;
@@ -45,3 +46,43 @@ auto handle_alloc(KernelObject* obj, Rights rights) -> handle_t;
 auto handle_free(handle_t h) -> void;
 auto handle_lookup(handle_t h, Rights needed = Rights{},
                    Rights* out_rights = nullptr) -> KernelObject*;
+
+template <typename T>
+auto typed_lookup(HandleTable& table, handle_t h, Rights needed = {}) -> km::Result<T*> {
+    auto* obj = table.Lookup(h, needed);
+    if (!obj || obj->type() != T::kType) return km::Result<T*>::Err(-1);
+    return km::Result<T*>::Ok(static_cast<T*>(obj));
+}
+
+class ScopedHandle {
+    HandleTable* table_ = nullptr;
+    handle_t handle_ = INVALID_HANDLE;
+public:
+    ScopedHandle(HandleTable& t, handle_t h) noexcept : table_(&t), handle_(h) {}
+    ~ScopedHandle() { if (table_ && handle_ != INVALID_HANDLE) table_->Free(handle_); }
+
+    ScopedHandle(ScopedHandle&& other) noexcept
+        : table_(other.table_), handle_(other.handle_) {
+        other.table_ = nullptr;
+        other.handle_ = INVALID_HANDLE;
+    }
+
+    auto operator=(ScopedHandle&& other) noexcept -> ScopedHandle& {
+        if (this != &other) {
+            if (table_ && handle_ != INVALID_HANDLE) table_->Free(handle_);
+            table_ = other.table_;
+            handle_ = other.handle_;
+            other.table_ = nullptr;
+            other.handle_ = INVALID_HANDLE;
+        }
+        return *this;
+    }
+
+    ScopedHandle(const ScopedHandle&) = delete;
+    auto operator=(const ScopedHandle&) = delete;
+
+    auto get() const noexcept -> handle_t { return handle_; }
+    auto release() noexcept -> handle_t {
+        auto h = handle_; handle_ = INVALID_HANDLE; table_ = nullptr; return h;
+    }
+};

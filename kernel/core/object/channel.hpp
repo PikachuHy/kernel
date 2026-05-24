@@ -4,6 +4,7 @@
 #include "kernel/core/object/object.hpp"
 #include "kernel/core/object/handle_table.hpp"
 #include "kernel/lib/spinlock.hpp"
+#include "kernel/lib/scoped_mem.hpp"
 
 class Channel : public KernelObject {
 public:
@@ -12,11 +13,18 @@ public:
     Channel() : KernelObject(Type::Channel) {}
 
     struct Message {
-        uint8_t*  data;
-        size_t    data_len;
-        handle_t* handles;
-        size_t    num_handles;
-        Message*  next;
+        km::ScopedMem data_mem{nullptr};
+        km::ScopedMem handle_mem{nullptr};
+        size_t    data_len = 0;
+        handle_t* handles = nullptr;
+        size_t    num_handles = 0;
+        Message*  next = nullptr;
+
+        Message() = default;
+        Message(Message&& other) noexcept = default;
+        auto operator=(Message&& other) noexcept -> Message& = default;
+        Message(const Message&) = delete;
+        auto operator=(const Message&) = delete;
     };
 
     // Dual-queue channel: each endpoint has its own receive queue.
