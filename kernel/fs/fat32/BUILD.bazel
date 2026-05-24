@@ -10,6 +10,7 @@ cc_binary(
         "-O2",
     ],
     linkopts = ["-T", "$(location fat32.ld)"],
+    deps = ["//kernel/lib:utils"],
     visibility = ["//visibility:private"],
 )
 

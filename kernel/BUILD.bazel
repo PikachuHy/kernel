@@ -15,6 +15,7 @@ cc_binary(
     deps = [
         "//kernel/arch/x86_64:arch",
         "//kernel/lib:klib",
+        "//kernel/lib:utils",
         "//kernel/core/mm:mm",
         "//kernel/core/mm:vmo",
         "//kernel/core/mm:vmm",
