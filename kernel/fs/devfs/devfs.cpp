@@ -4,11 +4,7 @@
 // Kernel sends OpenPayload{path, file_handle} for each open.
 // file_handle is pre-allocated in OUR handle table -- use it directly.
 
-using uint64_t = unsigned long long;
-using uint32_t = unsigned int;
-using int32_t  = int;
-using uint8_t  = unsigned char;
-using size_t = decltype(sizeof(0));
+#include "kernel/lib/user_types.hpp"
 
 // -- Syscall numbers ----------------------------------------------------------
 constexpr int SYS_DEBUG_PRINT          = 0;
@@ -46,8 +42,8 @@ struct OpenPayload {
 };
 
 // -- Syscall wrappers ---------------------------------------------------------
-static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
-                          uint64_t a3, uint64_t a4, uint64_t a5) {
+static auto syscall6(uint64_t num, uint64_t a1, uint64_t a2,
+                      uint64_t a3, uint64_t a4, uint64_t a5) -> uint64_t {
     uint64_t ret;
     asm volatile(
         "movq %1, %%rax\n"
@@ -65,27 +61,27 @@ static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
     return ret;
 }
 
-static void debug(const char* msg) {
+static auto debug(const char* msg) -> void {
     syscall6(SYS_DEBUG_PRINT, (uint64_t)msg, 0, 0, 0, 0);
 }
 
-static int channel_write(uint32_t h, const void* data, size_t len) {
+static auto channel_write(uint32_t h, const void* data, size_t len) -> int {
     struct WA { const void* d; size_t sz; const uint32_t* hnd; size_t n; };
     WA a = {data, len, nullptr, 0};
     return (int)syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&a, 0, 0, 0);
 }
 
-static int channel_read(uint32_t h, void* buf, size_t buf_size) {
+static auto channel_read(uint32_t h, void* buf, size_t buf_size) -> int {
     return (int)syscall6(SYS_CHANNEL_READ, h, (uint64_t)buf, buf_size, 0, 0);
 }
 
-static void handle_close(uint32_t h) {
+static auto handle_close(uint32_t h) -> void {
     syscall6(SYS_HANDLE_CLOSE, h, 0, 0, 0, 0);
 }
 
 // -- Device handlers ----------------------------------------------------------
 
-static void handle_null(uint32_t file_chan) {
+static auto handle_null(uint32_t file_chan) -> void {
     while (true) {
         uint8_t buf[4096];
         int rc = channel_read(file_chan, buf, sizeof(buf));
@@ -125,7 +121,7 @@ static void handle_null(uint32_t file_chan) {
     }
 }
 
-static void handle_zero(uint32_t file_chan) {
+static auto handle_zero(uint32_t file_chan) -> void {
     while (true) {
         uint8_t buf[4096];
         int rc = channel_read(file_chan, buf, sizeof(buf));
@@ -171,7 +167,7 @@ static void handle_zero(uint32_t file_chan) {
     }
 }
 
-static void handle_console(uint32_t file_chan) {
+static auto handle_console(uint32_t file_chan) -> void {
     while (true) {
         uint8_t buf[4096];
         int rc = channel_read(file_chan, buf, sizeof(buf));
@@ -218,7 +214,7 @@ static void handle_console(uint32_t file_chan) {
 }
 
 // -- Block device handler -----------------------------------------------------
-static void handle_block(uint32_t file_chan, const char* dev_name) {
+static auto handle_block(uint32_t file_chan, const char* dev_name) -> void {
     // Read sector 0 to verify the block device is accessible
     uint8_t probe[512];
     int rc = (int)syscall6(SYS_BLKDEV_READ, (uint64_t)dev_name, 0,

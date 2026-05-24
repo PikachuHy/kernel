@@ -2,11 +2,7 @@
 // User-space init process — first ring-3 program
 // Tests VFS: devfs console, FAT32 file read
 
-using uint64_t = unsigned long long;
-using uint32_t = unsigned int;
-using int32_t  = int;
-using uint8_t  = unsigned char;
-using size_t = decltype(sizeof(0));
+#include "kernel/lib/user_types.hpp"
 
 constexpr int SYS_DEBUG_PRINT    = 0;
 constexpr int SYS_HANDLE_CLOSE   = 1;
@@ -31,8 +27,8 @@ struct FileResponse {
     uint64_t size;
 };
 
-static inline uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
-                                 uint64_t a3, uint64_t a4, uint64_t a5) {
+static inline auto syscall6(uint64_t num, uint64_t a1, uint64_t a2,
+                             uint64_t a3, uint64_t a4, uint64_t a5) -> uint64_t {
     uint64_t ret;
     asm volatile(
         "movq %1, %%rax\n"
@@ -50,11 +46,11 @@ static inline uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
     return ret;
 }
 
-static void print(const char* msg) {
+static auto print(const char* msg) -> void {
     syscall6(SYS_DEBUG_PRINT, reinterpret_cast<uint64_t>(msg), 0, 0, 0, 0);
 }
 
-static void print_hex(uint64_t n) {
+static auto print_hex(uint64_t n) -> void {
     char buf[20] = "0x0000000000000000\n";
     for (int i = 17; i > 1; i--) {
         uint8_t d = n & 0xF;
@@ -64,7 +60,7 @@ static void print_hex(uint64_t n) {
     print(buf);
 }
 
-__attribute__((unused)) static void print_dec(uint64_t n) {
+__attribute__((unused)) static auto print_dec(uint64_t n) -> void {
     if (n == 0) { print("0"); return; }
     char buf[21];
     int i = 20;
@@ -73,13 +69,13 @@ __attribute__((unused)) static void print_dec(uint64_t n) {
     print(&buf[i + 1]);
 }
 
-__attribute__((unused)) static int channel_write(uint32_t h, const void* data, size_t len) {
+__attribute__((unused)) static auto channel_write(uint32_t h, const void* data, size_t len) -> int {
     struct WA { const void* d; size_t sz; const uint32_t* hnd; size_t n; };
     WA a = {data, len, nullptr, 0};
     return (int)syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&a, 0, 0, 0);
 }
 
-__attribute__((unused)) static int channel_read(uint32_t h, void* buf, size_t buf_size) {
+__attribute__((unused)) static auto channel_read(uint32_t h, void* buf, size_t buf_size) -> int {
     return (int)syscall6(SYS_CHANNEL_READ, h, (uint64_t)buf, buf_size, 0, 0);
 }
 

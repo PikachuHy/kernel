@@ -2,11 +2,7 @@
 // tmpfs filesystem server — ring-3 process at 0x600000
 // In-memory VMO-backed filesystem. Handle 0 = mount Channel.
 
-using uint64_t = unsigned long long;
-using uint32_t = unsigned int;
-using int32_t  = int;
-using uint8_t  = unsigned char;
-using size_t = decltype(sizeof(0));
+#include "kernel/lib/user_types.hpp"
 
 // ── Syscall numbers ──────────────────────────────────────────────
 constexpr int SYS_CHANNEL_WRITE        = 11;
@@ -32,8 +28,8 @@ struct OpenPayload { char path[256]; uint32_t file_handle; uint32_t flags; };
 constexpr uint32_t O_CREAT  = 1 << 3;
 
 // ── Syscall wrappers ─────────────────────────────────────────────
-static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
-                          uint64_t a3, uint64_t a4, uint64_t a5) {
+static auto syscall6(uint64_t num, uint64_t a1, uint64_t a2,
+                      uint64_t a3, uint64_t a4, uint64_t a5) -> uint64_t {
     uint64_t ret;
     asm volatile(
         "movq %1, %%rax\n"
@@ -50,21 +46,26 @@ static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
     );
     return ret;
 }
-static int channel_read(uint32_t h, void* buf, size_t sz) {
+
+static auto channel_read(uint32_t h, void* buf, size_t sz) -> int {
     return (int)syscall6(SYS_CHANNEL_READ, h, (uint64_t)buf, sz, 0, 0);
 }
-static int channel_write(uint32_t h, const void* data, size_t sz) {
+
+static auto channel_write(uint32_t h, const void* data, size_t sz) -> int {
     struct WA { const void* d; size_t sz; const uint32_t* hnd; size_t n; };
     WA a = {data, sz, nullptr, 0};
     return (int)syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&a, 0, 0, 0);
 }
-static uint32_t vmo_create(uint64_t size) {
+
+static auto vmo_create(uint64_t size) -> uint32_t {
     return (uint32_t)syscall6(SYS_VMO_CREATE, size, 0, 0, 0, 0);
 }
-static int vmo_map(uint32_t vmo_handle, uint64_t va, uint64_t flags, uint64_t off) {
+
+static auto vmo_map(uint32_t vmo_handle, uint64_t va, uint64_t flags, uint64_t off) -> int {
     return (int)syscall6(SYS_VMO_MAP, vmo_handle, va, flags, off, 0);
 }
-static void handle_close(uint32_t h) { syscall6(SYS_HANDLE_CLOSE, h, 0, 0, 0, 0); }
+
+static auto handle_close(uint32_t h) -> void { syscall6(SYS_HANDLE_CLOSE, h, 0, 0, 0, 0); }
 
 // ── In-memory directory ──────────────────────────────────────────
 struct DirEntry {
@@ -79,7 +80,7 @@ static DirEntry* root = nullptr;
 static DirEntry pool[64];
 static int pool_idx = 0;
 
-static DirEntry* find_entry(const char* name) {
+static auto find_entry(const char* name) -> DirEntry* {
     for (DirEntry* e = root; e; e = e->next) {
         int i = 0;
         while (name[i] && e->name[i] && name[i] == e->name[i]) i++;
@@ -88,7 +89,7 @@ static DirEntry* find_entry(const char* name) {
     return nullptr;
 }
 
-static DirEntry* add_entry(const char* name, uint32_t vmo_h, bool dir, uint64_t sz) {
+static auto add_entry(const char* name, uint32_t vmo_h, bool dir, uint64_t sz) -> DirEntry* {
     if (pool_idx >= 64) return nullptr;
     DirEntry* e = &pool[pool_idx++];
     int i = 0;
@@ -116,7 +117,7 @@ static FileState* file_list = nullptr;
 static FileState fspool[64];
 static int fspool_idx = 0;
 
-static FileState* alloc_file_state(uint32_t fchan, uint32_t vmo, bool dir, DirEntry* e) {
+static auto alloc_file_state(uint32_t fchan, uint32_t vmo, bool dir, DirEntry* e) -> FileState* {
     if (fspool_idx >= 64) return nullptr;
     FileState* fs = &fspool[fspool_idx++];
     fs->file_chan = fchan;
@@ -130,7 +131,7 @@ static FileState* alloc_file_state(uint32_t fchan, uint32_t vmo, bool dir, DirEn
 }
 
 // ── File handler ─────────────────────────────────────────────────
-static void handle_file(FileState* fs) {
+static auto handle_file(FileState* fs) -> void {
     // Map the VMO at a fixed address
     const uint64_t MAP_BASE = 0x70000000000ULL;
     if (fs->vmo_handle) {

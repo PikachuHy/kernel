@@ -2,12 +2,7 @@
 // FAT32 filesystem server — ring-3 process at 0x800000
 // Opens /dev/ahci0 to read raw sectors, parses MBR/BPB/FAT/directory.
 
-using uint64_t = unsigned long long;
-using uint32_t = unsigned int;
-using int32_t  = int;
-using uint8_t  = unsigned char;
-using uint16_t = unsigned short;
-using size_t = decltype(sizeof(0));
+#include "kernel/lib/user_types.hpp"
 
 // ── Syscall numbers ──────────────────────────────────────────────
 constexpr int SYS_HANDLE_CLOSE    = 1;
@@ -30,8 +25,8 @@ struct Stat { uint64_t size; uint32_t type; uint32_t padding; };
 struct OpenPayload { char path[256]; uint32_t file_handle; uint32_t flags; };
 
 // ── Syscall wrappers ─────────────────────────────────────────────
-static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
-                          uint64_t a3, uint64_t a4, uint64_t a5) {
+static auto syscall6(uint64_t num, uint64_t a1, uint64_t a2,
+                      uint64_t a3, uint64_t a4, uint64_t a5) -> uint64_t {
     uint64_t ret;
     asm volatile(
         "movq %1, %%rax\n" "movq %2, %%rdi\n" "movq %3, %%rsi\n"
@@ -43,14 +38,14 @@ static uint64_t syscall6(uint64_t num, uint64_t a1, uint64_t a2,
 }
 // Static WA struct — avoids stack corruption in deep call chains.
 static struct { const void* d; size_t sz; const uint32_t* hnd; size_t n; } s_wa;
-static int ch_write(uint32_t h, const void* d, size_t n) {
+static auto ch_write(uint32_t h, const void* d, size_t n) -> int {
     s_wa.d = d; s_wa.sz = n; s_wa.hnd = nullptr; s_wa.n = 0;
     return (int)syscall6(SYS_CHANNEL_WRITE, h, (uint64_t)&s_wa, 0, 0, 0);
 }
-static int ch_read(uint32_t h, void* b, size_t sz) {
+static auto ch_read(uint32_t h, void* b, size_t sz) -> int {
     return (int)syscall6(SYS_CHANNEL_READ, h, (uint64_t)b, sz, 0, 0);
 }
-static void ch_close(uint32_t h) { syscall6(SYS_HANDLE_CLOSE, h, 0, 0, 0, 0); }
+static auto ch_close(uint32_t h) -> void { syscall6(SYS_HANDLE_CLOSE, h, 0, 0, 0, 0); }
 
 // ── FAT32 structures ──────────────────────────────────────────────
 struct __attribute__((packed)) Bpb {
@@ -85,7 +80,7 @@ static uint32_t s_bps = 512, s_spc = 1, s_rsvd = 0, s_spf = 0, s_root = 0;
 static uint64_t s_fat_lba = 0, s_data_lba = 0;
 
 // ── Sector I/O (one sector at a time, small buffers) ─────────────
-static int read_sectors(uint64_t lba, uint8_t* buf, uint32_t count) {
+static auto read_sectors(uint64_t lba, uint8_t* buf, uint32_t count) -> int {
     uint64_t dlba = lba + s_part_base;
     for (uint32_t i = 0; i < count; i++) {
         FileMsg msg = {FileMsg::Read, 0, dlba + i, 1};
@@ -101,7 +96,7 @@ static int read_sectors(uint64_t lba, uint8_t* buf, uint32_t count) {
 }
 
 // ── FAT access ────────────────────────────────────────────────────
-static uint32_t read_fat_entry(uint32_t cluster) {
+static auto read_fat_entry(uint32_t cluster) -> uint32_t {
     uint64_t off = (uint64_t)cluster * 4;
     uint64_t lba = s_fat_lba + off / s_bps;
     uint32_t boff = off % s_bps;
@@ -111,12 +106,12 @@ static uint32_t read_fat_entry(uint32_t cluster) {
             ((uint32_t)sec[boff+2]<<16) | ((uint32_t)sec[boff+3]<<24)) & 0x0FFFFFFF;
 }
 
-static uint64_t cluster_to_lba(uint32_t cluster) {
+static auto cluster_to_lba(uint32_t cluster) -> uint64_t {
     return s_data_lba + (uint64_t)(cluster - 2) * s_spc;
 }
 
 // Walk FAT to find the Nth cluster (0-based). Returns 0 if out of range.
-static uint32_t walk_fat(uint32_t start, uint32_t n) {
+static auto walk_fat(uint32_t start, uint32_t n) -> uint32_t {
     uint32_t c = start;
     for (uint32_t i = 0; i < n && c >= 2 && c < 0x0FFFFFF8; i++)
         c = read_fat_entry(c);
@@ -124,15 +119,15 @@ static uint32_t walk_fat(uint32_t start, uint32_t n) {
 }
 
 // ── Directory search ──────────────────────────────────────────────
-static bool name_match(const char* a, const char* b) {
+static auto name_match(const char* a, const char* b) -> bool {
     int i = 0;
     while (b[i]) { char ca = a[i], cb = b[i]; if (ca>='a'&&ca<='z') ca-=32; if (cb>='a'&&cb<='z') cb-=32; if (ca!=cb) return false; i++; }
     return a[i] == '\0';
 }
 
 // Search directory starting at cluster for name. Returns first cluster (0=not found).
-static uint32_t dir_search(uint32_t dir_cluster, const char* name,
-                           uint32_t* out_size, bool* out_is_dir) {
+static auto dir_search(uint32_t dir_cluster, const char* name,
+                        uint32_t* out_size, bool* out_is_dir) -> uint32_t {
     char lfn[256];
     int lfn_len = 0;
     // Walk cluster chain of the directory
@@ -186,7 +181,7 @@ static uint32_t dir_search(uint32_t dir_cluster, const char* name,
 }
 
 // ── Path resolution ───────────────────────────────────────────────
-static uint32_t fat32_open(const char* path, uint32_t* out_size, bool* out_is_dir) {
+static auto fat32_open(const char* path, uint32_t* out_size, bool* out_is_dir) -> uint32_t {
     uint32_t dir = s_root;
     if (path[0] == '/') path++;
     // Empty path means root directory
@@ -217,7 +212,7 @@ static OpenFile s_of;
 
 // List directory entries starting at given cluster.
 // Returns count of entries read, or -1 on error.
-static int list_entries(uint32_t dir_cl, uint32_t cookie, Dirent* out, uint32_t max) {
+static auto list_entries(uint32_t dir_cl, uint32_t cookie, Dirent* out, uint32_t max) -> int {
     char lfn[256]; int lfn_len = 0;
     uint32_t cl = dir_cl;
     uint32_t found = 0;
@@ -272,7 +267,7 @@ static int list_entries(uint32_t dir_cl, uint32_t cookie, Dirent* out, uint32_t 
     return (int)found;
 }
 
-static void handle_file(uint32_t ch, uint32_t start, uint32_t size, bool is_dir) {
+static auto handle_file(uint32_t ch, uint32_t start, uint32_t size, bool is_dir) -> void {
     s_of.chan = ch; s_of.start_cluster = start; s_of.size = size; s_of.is_dir = is_dir;
 
     uint8_t rbuf[sizeof(FileMsg) + 64];
