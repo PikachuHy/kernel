@@ -3,12 +3,14 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 cc_library(
     name = "klib",
     srcs = [
+        "crt_stubs.cpp",
         "klog.cpp",
         "panic.cpp",
         "serial.cpp",
         "spinlock.cpp",
     ],
     hdrs = [
+        "crt_stubs.hpp",
         "klog.hpp",
         "panic.hpp",
         "serial.hpp",
