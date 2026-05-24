@@ -120,7 +120,7 @@ constexpr uint8_t FONT[128][16] = {
     [0x7F] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00},
 };
 
-void draw_glyph(uint32_t cx, uint32_t cy, char c) {
+auto draw_glyph(uint32_t cx, uint32_t cy, char c) -> void {
     if (c < 0x20 || c > 0x7F) c = '?';
     const uint8_t* glyph = FONT[(unsigned char)c];
     for (uint32_t y = 0; y < GLYPH_HEIGHT; y++) {
@@ -143,7 +143,7 @@ void draw_glyph(uint32_t cx, uint32_t cy, char c) {
     }
 }
 
-void scroll_screen() {
+auto scroll_screen() -> void {
     uint32_t row_bytes = GLYPH_HEIGHT * fb.pitch;
     uint8_t* dst = fb.addr;
     uint8_t* src = fb.addr + row_bytes;
@@ -157,7 +157,7 @@ void scroll_screen() {
     cursor_y -= GLYPH_HEIGHT;
 }
 
-void newline() {
+auto newline() -> void {
     cursor_x = 0;
     cursor_y += GLYPH_HEIGHT;
     if (cursor_y + GLYPH_HEIGHT > fb.height) {
@@ -170,7 +170,7 @@ void newline() {
 // Framebuffer virtual address from Limine (HHDM-mapped), saved for re-init.
 static uint64_t fb_limine_virt = 0;
 
-void klog_init(limine_framebuffer* framebuffer) {
+auto klog_init(limine_framebuffer* framebuffer) -> void {
     if (framebuffer) {
         fb_limine_virt = (uint64_t)framebuffer->address;
         fb.addr = (uint8_t*)framebuffer->address;
@@ -186,14 +186,14 @@ void klog_init(limine_framebuffer* framebuffer) {
 // Converts fb.addr from Limine HHDM virtual to kernel direct-map virtual:
 //   fb_phys = fb_limine_virt - limine_hhdm
 //   fb.addr = DIRECT_MAP_BASE + fb_phys
-void klog_reinit_fb(uint64_t limine_hhdm) {
+auto klog_reinit_fb(uint64_t limine_hhdm) -> void {
     if (fb_limine_virt) {
         uint64_t fb_phys = fb_limine_virt - limine_hhdm;
         fb.addr = (uint8_t*)(DIRECT_MAP_BASE + fb_phys);
     }
 }
 
-void klog_putc(char c) {
+auto klog_putc(char c) -> void {
     serial_putc(c);
     if (fb.addr == nullptr) return;
     if (c == '\n') {
@@ -207,19 +207,19 @@ void klog_putc(char c) {
     }
 }
 
-void klog_write(const char* str, size_t len) {
+auto klog_write(const char* str, size_t len) -> void {
     for (size_t i = 0; i < len; i++) {
         klog_putc(str[i]);
     }
 }
 
-void klog(const char* str) {
+auto klog(const char* str) -> void {
     while (*str) {
         klog_putc(*str++);
     }
 }
 
-void klog_hex(uint64_t value) {
+auto klog_hex(uint64_t value) -> void {
     const char hex[] = "0123456789ABCDEF";
     klog("0x");
     for (int i = 60; i >= 0; i -= 4) {
@@ -227,7 +227,7 @@ void klog_hex(uint64_t value) {
     }
 }
 
-void klog_dec(uint64_t value) {
+auto klog_dec(uint64_t value) -> void {
     if (value == 0) {
         klog_putc('0');
         return;

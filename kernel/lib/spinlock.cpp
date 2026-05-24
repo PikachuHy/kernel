@@ -1,6 +1,6 @@
 #include "kernel/lib/spinlock.hpp"
 
-void SpinLock::lock() {
+auto SpinLock::lock() -> void {
     while (__sync_lock_test_and_set(&locked_, 1)) {
         while (locked_) {
             asm volatile("pause");
@@ -8,10 +8,10 @@ void SpinLock::lock() {
     }
 }
 
-void SpinLock::unlock() {
+auto SpinLock::unlock() -> void {
     __sync_lock_release(&locked_);
 }
 
-bool SpinLock::try_lock() {
+auto SpinLock::try_lock() -> bool {
     return __sync_lock_test_and_set(&locked_, 1) == 0;
 }

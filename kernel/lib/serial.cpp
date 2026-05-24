@@ -17,7 +17,7 @@ uint8_t inb(uint16_t port) {
 
 } // namespace
 
-void serial_init() {
+auto serial_init() -> void {
     outb(COM1 + 1, 0x00); // disable interrupts
     outb(COM1 + 3, 0x80); // enable DLAB (set baud rate divisor)
     outb(COM1 + 0, 0x01); // divisor low  (115200 / 1)
@@ -27,7 +27,7 @@ void serial_init() {
     outb(COM1 + 4, 0x0B); // IRQs enabled, RTS/DSR set
 }
 
-void serial_putc(char c) {
+auto serial_putc(char c) -> void {
     while ((inb(COM1 + 5) & 0x20) == 0) {
         asm volatile("pause");
     }

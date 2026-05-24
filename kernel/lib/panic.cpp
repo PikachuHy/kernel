@@ -1,7 +1,7 @@
 #include "kernel/lib/panic.hpp"
 #include "kernel/lib/klog.hpp"
 
-[[noreturn]] void kpanic(const char* msg) {
+[[noreturn]] auto kpanic(const char* msg) -> void {
     klog("\n\n=== KERNEL PANIC ===\n");
     klog(msg);
     klog("\n");
@@ -10,7 +10,7 @@
     }
 }
 
-[[noreturn]] void kpanic(const char* msg, const char* file, int line) {
+[[noreturn]] auto kpanic(const char* msg, const char* file, int line) -> void {
     klog("\n\n=== KERNEL PANIC ===\n");
     klog("File: ");
     klog(file);

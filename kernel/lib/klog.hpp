@@ -5,10 +5,10 @@
 
 struct limine_framebuffer;
 
-void klog_init(struct limine_framebuffer* fb);
-void klog_reinit_fb(uint64_t limine_hhdm);
-void klog_putc(char c);
-void klog_write(const char* str, size_t len);
-void klog(const char* str);
-void klog_hex(uint64_t value);
-void klog_dec(uint64_t value);
+auto klog_init(struct limine_framebuffer* fb) -> void;
+auto klog_reinit_fb(uint64_t limine_hhdm) -> void;
+auto klog_putc(char c) -> void;
+auto klog_write(const char* str, size_t len) -> void;
+auto klog(const char* str) -> void;
+auto klog_hex(uint64_t value) -> void;
+auto klog_dec(uint64_t value) -> void;
