@@ -15,24 +15,24 @@ uint64_t* g_bitmap = g_bitmap_bss;
 size_t g_total_pages = 0;
 size_t g_scan_start = 0;
 
-inline bool bit_test(const uint64_t* bitmap, size_t idx) {
+inline auto bit_test(const uint64_t* bitmap, size_t idx) -> bool {
     return (bitmap[idx / 64] >> (idx % 64)) & 1;
 }
 
-inline void bit_set(uint64_t* bitmap, size_t idx) {
+inline auto bit_set(uint64_t* bitmap, size_t idx) -> void {
     bitmap[idx / 64] |= (1ULL << (idx % 64));
 }
 
-inline void bit_clear(uint64_t* bitmap, size_t idx) {
+inline auto bit_clear(uint64_t* bitmap, size_t idx) -> void {
     bitmap[idx / 64] &= ~(1ULL << (idx % 64));
 }
 
-inline size_t phys_to_idx(uint64_t phys) { return phys / PAGE_SIZE; }
-inline uint64_t idx_to_phys(size_t idx) { return idx * PAGE_SIZE; }
+inline auto phys_to_idx(uint64_t phys) -> size_t { return phys / PAGE_SIZE; }
+inline auto idx_to_phys(size_t idx) -> uint64_t { return idx * PAGE_SIZE; }
 
 } // namespace
 
-void bitmap_init(uint64_t hhdm_offset, uint64_t bitmap_base_phys) {
+auto bitmap_init(uint64_t hhdm_offset, uint64_t bitmap_base_phys) -> void {
     g_hhdm = hhdm_offset;
 
     size_t usable_count;
@@ -69,7 +69,7 @@ void bitmap_init(uint64_t hhdm_offset, uint64_t bitmap_base_phys) {
     g_scan_start = 0;
 }
 
-void* bitmap_alloc_page() {
+auto bitmap_alloc_page() -> void* {
     // Scan forward from last position
     for (size_t i = g_scan_start; i < g_total_pages; i++) {
         if (!bit_test(g_bitmap, i)) {
@@ -96,7 +96,7 @@ void* bitmap_alloc_page() {
     return nullptr;  // OOM
 }
 
-void bitmap_free_page(void* phys_addr) {
+auto bitmap_free_page(void* phys_addr) -> void {
     size_t idx = phys_to_idx(reinterpret_cast<uint64_t>(phys_addr));
     if (idx < g_total_pages) {
         bit_clear(g_bitmap, idx);
@@ -104,13 +104,13 @@ void bitmap_free_page(void* phys_addr) {
     }
 }
 
-bool bitmap_is_allocated(uint64_t phys_addr) {
+auto bitmap_is_allocated(uint64_t phys_addr) -> bool {
     size_t idx = phys_to_idx(phys_addr);
     if (idx >= g_total_pages) return true;  // out of range = considered allocated
     return bit_test(g_bitmap, idx);
 }
 
-size_t bitmap_free_page_count() {
+auto bitmap_free_page_count() -> size_t {
     size_t free = 0;
     for (size_t i = 0; i < g_total_pages; i++) {
         if (!bit_test(g_bitmap, i)) free++;
@@ -118,6 +118,6 @@ size_t bitmap_free_page_count() {
     return free;
 }
 
-size_t bitmap_total_page_count() {
+auto bitmap_total_page_count() -> size_t {
     return g_total_pages;
 }

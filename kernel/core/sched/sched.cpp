@@ -40,7 +40,7 @@ static Process* s_kernel_process = nullptr;
 // The idle thread runs when no other thread is ready on this CPU.
 // It halts the CPU to save power until the next interrupt.
 
-static void idle_entry(void) {
+static auto idle_entry(void) -> void {
     while (true) {
         asm volatile("sti; hlt; cli");
     }
@@ -50,10 +50,10 @@ static void idle_entry(void) {
 // Priority = 7 (lowest), tid = 0, state = Running.
 // Stack is set up so that scheduler_start can enter idle_entry via
 // the same register-restore sequence used by switch_to.
-static Thread* create_idle_thread(uint32_t cpu_id) {
+static auto create_idle_thread(uint32_t cpu_id) -> Thread* {
     (void)cpu_id;
 
-    Thread* t = static_cast<Thread*>(kmalloc(sizeof(Thread)));
+    auto* t = static_cast<Thread*>(kmalloc(sizeof(Thread)));
     if (!t) KPANIC("sched: failed to allocate idle Thread");
 
     // Use a 16KB stack so timer interrupts don't overwrite the initial
@@ -128,7 +128,7 @@ static Thread* create_idle_thread(uint32_t cpu_id) {
 }
 
 // ── Scheduler initialization ─────────────────────────────────────────
-void scheduler_init(uint64_t hhdm) {
+auto scheduler_init(uint64_t hhdm) -> void {
     g_hhdm = hhdm;
 
     klog("scheduler: initializing");
@@ -164,7 +164,7 @@ void scheduler_init(uint64_t hhdm) {
 // jumps to its entry function via the same register-restore sequence
 // used by switch_to (pop r15..rbx, popfq, ret).
 // Never returns.
-void scheduler_start() {
+auto scheduler_start() -> void {
     klog("scheduler: starting...\n");
 
     // Pick the first thread from CPU 0's run queue
@@ -221,7 +221,7 @@ void scheduler_start() {
 }
 
 // ── Timer tick (preemption) ─────────────────────────────────────────
-void scheduler_tick() {
+auto scheduler_tick() -> void {
     Thread* cur = s_current_threads[0];
     if (!cur) return;
 
@@ -237,7 +237,7 @@ void scheduler_tick() {
 }
 
 // ── Scheduler core: pick next thread, context switch ─────────────────
-void scheduler_schedule() {
+auto scheduler_schedule() -> void {
     Thread* prev = s_current_threads[0];
 
     // Push prev back to run queue if it is still runnable and not idle.
@@ -295,11 +295,11 @@ void scheduler_schedule() {
 }
 
 // ── Thread creation ──────────────────────────────────────────────────
-Thread* thread_create(void (*entry)(), const char* name, uint8_t priority,
-                      Process* process) {
+auto thread_create(void (*entry)(), const char* name, uint8_t priority,
+                   Process* process) -> Thread* {
     if (!g_sched_initialized) return nullptr;
 
-    Thread* t = static_cast<Thread*>(kmalloc(sizeof(Thread)));
+    auto* t = static_cast<Thread*>(kmalloc(sizeof(Thread)));
     if (!t) return nullptr;
 
     void* stack_phys = bitmap_alloc_page();
@@ -365,7 +365,7 @@ Thread* thread_create(void (*entry)(), const char* name, uint8_t priority,
 }
 
 // ── Thread start ─────────────────────────────────────────────────────
-void thread_start(Thread* t) {
+auto thread_start(Thread* t) -> void {
     if (!t) return;
 
     // Convert rsp from physical offset to virtual address
@@ -385,7 +385,7 @@ void thread_start(Thread* t) {
 }
 
 // ── Thread yield (voluntary reschedule) ──────────────────────────────
-void thread_yield() {
+auto thread_yield() -> void {
     // Mark current thread as Ready so scheduler_schedule will re-enqueue it
     Thread* cur = s_current_threads[0];
     if (cur && cur->state == ThreadState::Running) {
@@ -396,7 +396,7 @@ void thread_yield() {
 }
 
 // ── Thread exit ──────────────────────────────────────────────────────
-[[noreturn]] void thread_exit() {
+[[noreturn]] auto thread_exit() -> void {
     Thread* cur = s_current_threads[0];
     if (cur) {
         cur->state = ThreadState::Dead;
@@ -418,10 +418,10 @@ void thread_yield() {
 }
 
 // ── Current thread accessor ──────────────────────────────────────────
-Thread* current_thread() {
+auto current_thread() -> Thread* {
     return s_current_threads[0];
 }
 
-Thread* get_idle_thread() {
+auto get_idle_thread() -> Thread* {
     return s_idle_threads[0];
 }

@@ -12,7 +12,7 @@ inline void* operator new(size_t, void* p) noexcept { return p; }
 
 uint64_t Vmo::s_direct_map_offset_ = DIRECT_MAP_BASE;
 
-void Vmo::SetDirectMapOffset(uint64_t offset) {
+auto Vmo::SetDirectMapOffset(uint64_t offset) -> void {
     s_direct_map_offset_ = offset;
 }
 
@@ -45,7 +45,7 @@ Vmo::~Vmo() {
     kfree(pages_);
 }
 
-Vmo* Vmo::CreateAnonymous(uint64_t size) {
+auto Vmo::CreateAnonymous(uint64_t size) -> Vmo* {
     size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     if (size == 0) return nullptr;
     void* mem = kmalloc(sizeof(Vmo));
@@ -53,7 +53,7 @@ Vmo* Vmo::CreateAnonymous(uint64_t size) {
     return new (mem) Vmo(Anonymous, size);
 }
 
-Vmo* Vmo::CreatePhysical(uint64_t size, uint64_t phys_base) {
+auto Vmo::CreatePhysical(uint64_t size, uint64_t phys_base) -> Vmo* {
     size = (size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
     void* mem = kmalloc(sizeof(Vmo));
     if (!mem) return nullptr;
@@ -61,7 +61,7 @@ Vmo* Vmo::CreatePhysical(uint64_t size, uint64_t phys_base) {
 
     // Pre-allocate all CowPage entries with cow_refs=1
     for (uint64_t i = 0; i < vmo->num_pages_; i++) {
-        CowPage* cp = static_cast<CowPage*>(kmalloc(sizeof(CowPage)));
+        auto* cp = static_cast<CowPage*>(kmalloc(sizeof(CowPage)));
         if (!cp) KPANIC("Vmo: OOM creating Physical pages");
         cp->phys_addr = phys_base + i * PAGE_SIZE;
         cp->cow_refs = 1;
@@ -70,7 +70,7 @@ Vmo* Vmo::CreatePhysical(uint64_t size, uint64_t phys_base) {
     return vmo;
 }
 
-uint64_t Vmo::GetPage(uint64_t offset, bool for_write) {
+auto Vmo::GetPage(uint64_t offset, bool for_write) -> uint64_t {
     uint64_t page_idx = offset / PAGE_SIZE;
     if (page_idx >= num_pages_) return 0;
 
@@ -117,7 +117,7 @@ uint64_t Vmo::GetPage(uint64_t offset, bool for_write) {
 
         cp->cow_refs--;
 
-        CowPage* new_cp = static_cast<CowPage*>(kmalloc(sizeof(CowPage)));
+        auto* new_cp = static_cast<CowPage*>(kmalloc(sizeof(CowPage)));
         if (!new_cp) {
             bitmap_free_page(new_phys);
             lock_.unlock();
@@ -135,7 +135,7 @@ uint64_t Vmo::GetPage(uint64_t offset, bool for_write) {
     return cp->phys_addr;
 }
 
-Vmo* Vmo::CloneCoW() {
+auto Vmo::CloneCoW() -> Vmo* {
     Vmo* child = CreateAnonymous(size_);
     if (!child) return nullptr;
 

@@ -5,7 +5,7 @@
 
 // ── PML4 management ─────────────────────────────────────────────────
 
-uint64_t vmm_create_user_pml4() {
+auto vmm_create_user_pml4() -> uint64_t {
     uint64_t template_pml4 = paging_kernel_pml4_template();
     if (!template_pml4) return 0;
 
@@ -27,7 +27,7 @@ uint64_t vmm_create_user_pml4() {
     return np;
 }
 
-void vmm_destroy_user_pml4(uint64_t pml4_phys) {
+auto vmm_destroy_user_pml4(uint64_t pml4_phys) -> void {
     if (!pml4_phys) return;
     uint64_t* pml4 = reinterpret_cast<uint64_t*>(DIRECT_MAP_BASE + pml4_phys);
 
@@ -57,7 +57,7 @@ void vmm_destroy_user_pml4(uint64_t pml4_phys) {
 
 // ── VmRegion list operations ────────────────────────────────────────
 
-bool vmm_insert_region(VmRegion** head, VmRegion* region) {
+auto vmm_insert_region(VmRegion** head, VmRegion* region) -> bool {
     uint64_t end = region->base_va + region->size;
 
     VmRegion** prev = head;
@@ -73,7 +73,7 @@ bool vmm_insert_region(VmRegion** head, VmRegion* region) {
     return true;
 }
 
-VmRegion* vmm_find_region(VmRegion* head, uint64_t va) {
+auto vmm_find_region(VmRegion* head, uint64_t va) -> VmRegion* {
     while (head) {
         if (va >= head->base_va && va < head->base_va + head->size) {
             return head;
@@ -84,8 +84,8 @@ VmRegion* vmm_find_region(VmRegion* head, uint64_t va) {
     return nullptr;
 }
 
-VmRegion* vmm_remove_region(VmRegion** head, uint64_t va, uint64_t size,
-                             uint64_t pml4_phys) {
+auto vmm_remove_region(VmRegion** head, uint64_t va, uint64_t size,
+                         uint64_t pml4_phys) -> VmRegion* {
     while (*head) {
         if (va >= (*head)->base_va && va < (*head)->base_va + (*head)->size) {
             VmRegion* r = *head;

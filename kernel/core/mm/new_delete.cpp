@@ -1,7 +1,7 @@
 #include <stddef.h>
 #include "kernel/core/mm/slab.hpp"
 
-void* operator new(size_t size) {
+auto operator new(size_t size) -> void* {
     if (size == 0) size = 1;
     void* p = kmalloc(size);
     if (!p) {
@@ -11,23 +11,23 @@ void* operator new(size_t size) {
     return p;
 }
 
-void* operator new[](size_t size) {
+auto operator new[](size_t size) -> void* {
     return operator new(size);
 }
 
-void operator delete(void* ptr) noexcept {
+auto operator delete(void* ptr) noexcept -> void {
     if (ptr) kfree(ptr);
 }
 
-void operator delete[](void* ptr) noexcept {
+auto operator delete[](void* ptr) noexcept -> void {
     if (ptr) kfree(ptr);
 }
 
-void operator delete(void* ptr, size_t) noexcept {
+auto operator delete(void* ptr, size_t) noexcept -> void {
     if (ptr) kfree(ptr);
 }
 
-void operator delete[](void* ptr, size_t) noexcept {
+auto operator delete[](void* ptr, size_t) noexcept -> void {
     if (ptr) kfree(ptr);
 }
 

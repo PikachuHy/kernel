@@ -4,12 +4,12 @@
 // Global linked list head
 static BlockDevice* s_devices = nullptr;
 
-void blkdev_register(BlockDevice* dev) {
+auto blkdev_register(BlockDevice* dev) -> void {
     dev->next = s_devices;
     s_devices = dev;
 }
 
-BlockDevice* blkdev_find(const char* name) {
+auto blkdev_find(const char* name) -> BlockDevice* {
     for (BlockDevice* d = s_devices; d; d = d->next) {
         bool match = true;
         for (int i = 0; i < 32; i++) {
@@ -21,14 +21,14 @@ BlockDevice* blkdev_find(const char* name) {
     return nullptr;
 }
 
-int blkdev_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) {
+auto blkdev_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) -> int {
     return bufcache_read(dev, lba, buf, count);
 }
 
-int blkdev_write(BlockDevice* dev, uint64_t lba, const void* buf, size_t count) {
+auto blkdev_write(BlockDevice* dev, uint64_t lba, const void* buf, size_t count) -> int {
     return bufcache_write(dev, lba, buf, count);
 }
 
-void blkdev_flush(BlockDevice* dev) {
+auto blkdev_flush(BlockDevice* dev) -> void {
     bufcache_flush(dev);
 }

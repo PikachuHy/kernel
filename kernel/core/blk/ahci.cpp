@@ -104,8 +104,8 @@ static inline void ahci_udelay() {
 }
 
 // Spin-wait until (reg & mask) == 0.  Returns 0 on success, -1 on timeout.
-static int ahci_wait_clear(uint8_t* mmio, uint32_t reg, uint32_t mask,
-                           int timeout_loops) {
+static auto ahci_wait_clear(uint8_t* mmio, uint32_t reg, uint32_t mask,
+                            int timeout_loops) -> int {
     for (int i = 0; i < timeout_loops; i++) {
         if (!(ahci_read32(mmio, reg) & mask))
             return 0;
@@ -115,8 +115,8 @@ static int ahci_wait_clear(uint8_t* mmio, uint32_t reg, uint32_t mask,
 }
 
 // Spin-wait until (reg & mask) != 0.  Returns 0 on success, -1 on timeout.
-static int ahci_wait_set(uint8_t* mmio, uint32_t reg, uint32_t mask,
-                         int timeout_loops) {
+static auto ahci_wait_set(uint8_t* mmio, uint32_t reg, uint32_t mask,
+                          int timeout_loops) -> int {
     for (int i = 0; i < timeout_loops; i++) {
         if (ahci_read32(mmio, reg) & mask)
             return 0;
@@ -126,7 +126,7 @@ static int ahci_wait_set(uint8_t* mmio, uint32_t reg, uint32_t mask,
 }
 
 // Swap byte pairs in a buffer (for ATA model string conversion).
-static void byte_swap_pairs(uint8_t* buf, size_t len) {
+static auto byte_swap_pairs(uint8_t* buf, size_t len) -> void {
     for (size_t i = 0; i + 1 < len; i += 2) {
         uint8_t t = buf[i];
         buf[i]     = buf[i + 1];
@@ -137,7 +137,7 @@ static void byte_swap_pairs(uint8_t* buf, size_t len) {
 // ── Port Lifecycle ────────────────────────────────────────────────────────
 
 // Stop port DMA engine.  Returns 0 on success.
-static int ahci_port_stop(uint8_t* mmio) {
+static auto ahci_port_stop(uint8_t* mmio) -> int {
     uint32_t cmd = ahci_read32(mmio, PXCMD);
     ahci_write32(mmio, PXCMD, cmd & ~(PXCMD_ST | PXCMD_FRE));
     return ahci_wait_clear(mmio, PXCMD, PXCMD_CR | PXCMD_FR, 100000);
@@ -145,7 +145,7 @@ static int ahci_port_stop(uint8_t* mmio) {
 
 // Allocate and initialise per-port DMA structures, start port.
 // Returns 0 on success.
-static int ahci_port_init(AhciPort* port) {
+static auto ahci_port_init(AhciPort* port) -> int {
     uint8_t* mmio = port->mmio_base;
     uint32_t cmd;
 
@@ -213,7 +213,7 @@ err_clb:
     return -1;
 }
 
-static void ahci_port_free(AhciPort* port) {
+static auto ahci_port_free(AhciPort* port) -> void {
     ahci_port_stop(port->mmio_base);
     if (port->clb_phys) buddy_free_pages(reinterpret_cast<void*>(port->clb_phys), 0);
     if (port->fb_phys)  buddy_free_pages(reinterpret_cast<void*>(port->fb_phys), 0);
@@ -222,8 +222,8 @@ static void ahci_port_free(AhciPort* port) {
 
 // ── ATA IDENTIFY ──────────────────────────────────────────────────────────
 
-static int ahci_port_identify(AhciPort* port, char* model_out,
-                              size_t model_max, uint64_t* sectors_out) {
+static auto ahci_port_identify(AhciPort* port, char* model_out,
+                               size_t model_max, uint64_t* sectors_out) -> int {
     uint8_t* mmio   = port->mmio_base;
     uint8_t* ct     = port->ct_virt;
 
@@ -325,8 +325,8 @@ static int ahci_port_identify(AhciPort* port, char* model_out,
 
 // ── BlockDevice callbacks ─────────────────────────────────────────────────
 
-static int ahci_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) {
-    AhciPort* port = static_cast<AhciPort*>(dev->driver_data);
+static auto ahci_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) -> int {
+    auto* port = static_cast<AhciPort*>(dev->driver_data);
     uint8_t* mmio  = port->mmio_base;
     size_t   bps   = dev->sector_size;  // 512
     (void)bps;
@@ -401,9 +401,9 @@ static int ahci_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) {
     return 0;
 }
 
-static int ahci_write(BlockDevice* dev, uint64_t lba, const void* buf,
-                      size_t count) {
-    AhciPort* port = static_cast<AhciPort*>(dev->driver_data);
+static auto ahci_write(BlockDevice* dev, uint64_t lba, const void* buf,
+                       size_t count) -> int {
+    auto* port = static_cast<AhciPort*>(dev->driver_data);
     uint8_t* mmio  = port->mmio_base;
 
     for (size_t s = 0; s < count; s++) {
@@ -477,7 +477,7 @@ static int ahci_write(BlockDevice* dev, uint64_t lba, const void* buf,
 
 // ── Initialisation ────────────────────────────────────────────────────────
 
-void ahci_init() {
+auto ahci_init() -> void {
     klog("AHCI: probing for SATA controller...\n");
 
     PciDevice* pci = pci_find_by_class(PCI_CLASS_STORAGE, PCI_SUBCLASS_SATA);
@@ -537,7 +537,7 @@ void ahci_init() {
         klog("    -> device detected, initialising port...\n");
 
         // Allocate port state.
-        AhciPort* port = static_cast<AhciPort*>(kmalloc(sizeof(AhciPort)));
+        auto* port = static_cast<AhciPort*>(kmalloc(sizeof(AhciPort)));
         if (!port) continue;
         port->mmio_base = pm;
         port->port_num  = port_num;
@@ -588,7 +588,7 @@ void ahci_init() {
         klog_dec(total_sectors); klog(" sectors)\n");
 
         // Register BlockDevice.
-        BlockDevice* bdev = static_cast<BlockDevice*>(kmalloc(sizeof(BlockDevice)));
+        auto* bdev = static_cast<BlockDevice*>(kmalloc(sizeof(BlockDevice)));
         if (!bdev) {
             ahci_port_free(port);
             kfree(port);

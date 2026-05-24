@@ -12,7 +12,7 @@ inline void* operator new(size_t, void* p) noexcept { return p; }
 #include "kernel/core/mm/bitmap_alloc.hpp"
 #include "kernel/arch/x86_64/paging.hpp"
 
-Process* Process::Create(const char* name, bool kernel_process) {
+auto Process::Create(const char* name, bool kernel_process) -> Process* {
     uint64_t pml4;
     if (kernel_process) {
         // Kernel process shares the kernel PML4 template (no user mappings).
@@ -75,12 +75,12 @@ Process::~Process() {
     handles.Destroy();
 }
 
-bool Process::Map(Vmo* vmo, uint64_t va, uint64_t vmo_offset,
-                  uint64_t size, uint64_t flags) {
+auto Process::Map(Vmo* vmo, uint64_t va, uint64_t vmo_offset,
+                  uint64_t size, uint64_t flags) -> bool {
     if (va + size < va) return false;
     if (size == 0) return false;
 
-    VmRegion* r = static_cast<VmRegion*>(kmalloc(sizeof(VmRegion)));
+    auto* r = static_cast<VmRegion*>(kmalloc(sizeof(VmRegion)));
     if (!r) return false;
 
     r->base_va    = va;
@@ -99,7 +99,7 @@ bool Process::Map(Vmo* vmo, uint64_t va, uint64_t vmo_offset,
     return true;
 }
 
-bool Process::Unmap(uint64_t va, uint64_t size) {
+auto Process::Unmap(uint64_t va, uint64_t size) -> bool {
     // Find the region first to get the VMO reference
     VmRegion* r = vmm_find_region(regions, va);
     if (!r) return false;
@@ -113,11 +113,11 @@ bool Process::Unmap(uint64_t va, uint64_t size) {
     return true;
 }
 
-VmRegion* Process::FindRegion(uint64_t va) {
+auto Process::FindRegion(uint64_t va) -> VmRegion* {
     return vmm_find_region(regions, va);
 }
 
-bool Process::HandlePageFault(uint64_t fault_addr, bool was_write) {
+auto Process::HandlePageFault(uint64_t fault_addr, bool was_write) -> bool {
     VmRegion* r = FindRegion(fault_addr);
     if (!r) return false;
 
@@ -150,13 +150,13 @@ bool Process::HandlePageFault(uint64_t fault_addr, bool was_write) {
     return page_table_map(pml4_phys, fault_addr, phys, pte_flags);
 }
 
-void Process::AddThread(Thread* t) {
+auto Process::AddThread(Thread* t) -> void {
     t->proc_next = threads;
     threads = t;
     t->process = this;
 }
 
-void Process::RemoveThread(Thread* t) {
+auto Process::RemoveThread(Thread* t) -> void {
     Thread** prev = &threads;
     while (*prev) {
         if (*prev == t) {

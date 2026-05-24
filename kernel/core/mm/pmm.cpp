@@ -9,17 +9,17 @@ uint64_t g_total = 0;
 uint64_t g_usable_mem = 0;
 uint64_t g_highest = 0;
 
-bool overlaps(uint64_t a_start, uint64_t a_end, uint64_t b_start, uint64_t b_end) {
+auto overlaps(uint64_t a_start, uint64_t a_end, uint64_t b_start, uint64_t b_end) -> bool {
     return a_start < b_end && b_start < a_end;
 }
 
 } // namespace
 
-void pmm_init(
+auto pmm_init(
     const MemRange* ranges,
     size_t count,
     uint64_t kernel_phys_start,
-    uint64_t kernel_phys_end)
+    uint64_t kernel_phys_end) -> void
 {
     g_usable_count = 0;
     g_total = 0;
@@ -59,16 +59,16 @@ void pmm_init(
     }
 }
 
-uint64_t pmm_total_memory() { return g_total; }
-uint64_t pmm_usable_memory() { return g_usable_mem; }
-uint64_t pmm_highest_phys_addr() { return g_highest; }
+auto pmm_total_memory() -> uint64_t { return g_total; }
+auto pmm_usable_memory() -> uint64_t { return g_usable_mem; }
+auto pmm_highest_phys_addr() -> uint64_t { return g_highest; }
 
-const MemRange* pmm_usable_ranges(size_t* out_count) {
+auto pmm_usable_ranges(size_t* out_count) -> const MemRange* {
     *out_count = g_usable_count;
     return g_usable;
 }
 
-bool pmm_is_usable(uint64_t phys_addr, uint64_t length) {
+auto pmm_is_usable(uint64_t phys_addr, uint64_t length) -> bool {
     for (size_t i = 0; i < g_usable_count; i++) {
         if (g_usable[i].base <= phys_addr &&
             phys_addr + length <= g_usable[i].base + g_usable[i].length) {

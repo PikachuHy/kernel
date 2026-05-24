@@ -1,7 +1,7 @@
 #include "kernel/core/object/channel.hpp"
 #include "kernel/core/mm/slab.hpp"
 
-void Channel::Enqueue(Message* msg, Message** head, Message** tail) {
+auto Channel::Enqueue(Message* msg, Message** head, Message** tail) -> void {
     msg->next = nullptr;
     if (!*head) {
         *head = *tail = msg;
@@ -11,7 +11,7 @@ void Channel::Enqueue(Message* msg, Message** head, Message** tail) {
     }
 }
 
-Channel::Message* Channel::Dequeue(Message** head, Message** tail) {
+auto Channel::Dequeue(Message** head, Message** tail) -> Channel::Message* {
     if (!*head) return nullptr;
     Message* msg = *head;
     *head = (*head)->next;
@@ -19,10 +19,10 @@ Channel::Message* Channel::Dequeue(Message** head, Message** tail) {
     return msg;
 }
 
-int Channel::Write(const void* data, size_t len,
+auto Channel::Write(const void* data, size_t len,
                     const handle_t* handles, size_t num_handles,
-                    bool from_endpoint_b) {
-    Message* msg = static_cast<Message*>(kmalloc(sizeof(Message)));
+                    bool from_endpoint_b) -> int {
+    auto* msg = static_cast<Message*>(kmalloc(sizeof(Message)));
     if (!msg) return -1;
 
     msg->data = nullptr;
@@ -62,10 +62,10 @@ int Channel::Write(const void* data, size_t len,
     return 0;
 }
 
-int Channel::Read(void* buf, size_t buf_size, size_t* out_len,
-                  handle_t* handle_buf, size_t buf_capacity,
-                  size_t* out_num_handles,
-                  bool from_endpoint_b) {
+auto Channel::Read(void* buf, size_t buf_size, size_t* out_len,
+                   handle_t* handle_buf, size_t buf_capacity,
+                   size_t* out_num_handles,
+                   bool from_endpoint_b) -> int {
     lock_.lock();
     Message* msg = from_endpoint_b
         ? Dequeue(&head_b_, &tail_b_)   // B reads from queue_b_ (messages from A)

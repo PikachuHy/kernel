@@ -6,7 +6,7 @@
 // Placement new (freestanding — no <new> header provided by our cross toolchain)
 inline void* operator new(size_t, void* p) noexcept { return p; }
 
-int Port::Accept(handle_t* out_channel) {
+auto Port::Accept(handle_t* out_channel) -> int {
     lock_.lock();
     Conn* conn = head_;
     if (conn) {
@@ -22,8 +22,8 @@ int Port::Accept(handle_t* out_channel) {
     return 0;
 }
 
-int Port::Connect(Port* port, HandleTable& handles, handle_t* out_client_chan) {
-    Channel* ch = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+auto Port::Connect(Port* port, HandleTable& handles, handle_t* out_client_chan) -> int {
+    auto* ch = static_cast<Channel*>(kmalloc(sizeof(Channel)));
     if (!ch) return -1;
     new (ch) Channel();
 
@@ -35,7 +35,7 @@ int Port::Connect(Port* port, HandleTable& handles, handle_t* out_client_chan) {
     handle_t b = handles.Alloc(ch, rb);  // endpoint B
     ch->Release(); // handles own the ref
 
-    Conn* conn = static_cast<Conn*>(kmalloc(sizeof(Conn)));
+    auto* conn = static_cast<Conn*>(kmalloc(sizeof(Conn)));
     if (!conn) {
         handles.Free(a);
         handles.Free(b);
@@ -70,7 +70,7 @@ namespace {
     SpinLock g_name_lock;
 }
 
-void port_register_name(const char* name, Port* port) {
+auto port_register_name(const char* name, Port* port) -> void {
     g_name_lock.lock();
     if (g_name_count < MAX_NAMES) {
         g_names[g_name_count].name = name;
@@ -80,7 +80,7 @@ void port_register_name(const char* name, Port* port) {
     g_name_lock.unlock();
 }
 
-Port* port_lookup_name(const char* name) {
+auto port_lookup_name(const char* name) -> Port* {
     g_name_lock.lock();
     for (int i = 0; i < g_name_count; i++) {
         const char* n = g_names[i].name;

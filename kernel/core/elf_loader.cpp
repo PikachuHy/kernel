@@ -57,9 +57,9 @@ extern "C" void elf_trampoline();
 
 // ── elf_load ──────────────────────────────────────────────────────
 
-Process* elf_load(const void* elf_data, size_t elf_size,
-                  const char* proc_name, uint8_t priority,
-                  Thread** out_thread) {
+auto elf_load(const void* elf_data, size_t elf_size,
+              const char* proc_name, uint8_t priority,
+              Thread** out_thread) -> Process* {
     if (elf_size < sizeof(Elf64Header)) {
         klog("elf_load: file too small\n");
         return nullptr;
@@ -321,7 +321,7 @@ Process* elf_load(const void* elf_data, size_t elf_size,
 extern "C" uint8_t _binary_init_bin_start[];
 extern "C" uint8_t _binary_init_bin_end[];
 
-extern "C" void elf_load_init_process() {
+extern "C" auto elf_load_init_process() -> void {
     uint64_t init_size = _binary_init_bin_end - _binary_init_bin_start;
     klog("Loading init process (");
     klog_hex(init_size);
@@ -348,7 +348,7 @@ extern "C" uint8_t _binary_fat32_bin_end[];
 extern "C" uint8_t _binary_shell_bin_start[];
 extern "C" uint8_t _binary_shell_bin_end[];
 
-extern "C" void elf_load_fs_servers() {
+extern "C" auto elf_load_fs_servers() -> void {
     // ── devfs ─────────────────────────────────────────────────
     {
         uint64_t size = _binary_devfs_bin_end - _binary_devfs_bin_start;
@@ -361,7 +361,7 @@ extern "C" void elf_load_fs_servers() {
             return;
         }
 
-        Channel* mount_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+        auto* mount_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
         if (!mount_chan) {
             klog("  FAILED to create devfs mount Channel\n");
             return;
@@ -393,7 +393,7 @@ extern "C" void elf_load_fs_servers() {
             return;
         }
 
-        Channel* mount_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+        auto* mount_chan = static_cast<Channel*>(kmalloc(sizeof(Channel)));
         if (!mount_chan) {
             klog("  FAILED to create tmpfs mount Channel\n");
             return;
@@ -413,7 +413,7 @@ extern "C" void elf_load_fs_servers() {
 }
 
 // ── FAT32 FS server ────────────────────────────────────────────
-extern "C" void elf_load_fat32() {
+extern "C" auto elf_load_fat32() -> void {
     uint64_t size = _binary_fat32_bin_end - _binary_fat32_bin_start;
     klog("Loading FAT32 server ("); klog_hex(size); klog(" bytes)...\n");
 
@@ -443,7 +443,7 @@ extern "C" void elf_load_fat32() {
 }
 
 // ── Shell ────────────────────────────────────────────────────────
-extern "C" void elf_load_shell() {
+extern "C" auto elf_load_shell() -> void {
     uint64_t size = _binary_shell_bin_end - _binary_shell_bin_start;
     klog("Loading shell ("); klog_hex(size); klog(" bytes)...\n");
 

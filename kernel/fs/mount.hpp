@@ -15,15 +15,15 @@ struct MountEntry {
 constexpr size_t MAX_MOUNTS = 16;
 
 // Initialize the mount table.
-void mount_init();
+auto mount_init() -> void;
 
 // Add or replace a mount entry. The kernel takes ownership of fs_channel.
 // Returns 0 on success, -1 if table is full.
-int mount_add(const char* path, Channel* fs_channel, Process* fs_process);
+auto mount_add(const char* path, Channel* fs_channel, Process* fs_process) -> int;
 
 // Remove a mount entry by path. Returns 0 on success, -1 if not found.
-int mount_remove(const char* path);
+auto mount_remove(const char* path) -> int;
 
 // Find the longest-prefix matching mount entry for the given path.
 // Returns nullptr if no match.
-MountEntry* mount_resolve(const char* path);
+auto mount_resolve(const char* path) -> MountEntry*;

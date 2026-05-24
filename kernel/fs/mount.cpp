@@ -5,7 +5,7 @@
 static MountEntry g_mounts[MAX_MOUNTS];
 static size_t     g_mount_count = 0;
 
-void mount_init() {
+auto mount_init() -> void {
     for (size_t i = 0; i < MAX_MOUNTS; i++) {
         g_mounts[i].active = false;
         g_mounts[i].fs_channel = nullptr;
@@ -15,7 +15,7 @@ void mount_init() {
     g_mount_count = 0;
 }
 
-int mount_add(const char* path, Channel* fs_channel, Process* fs_process) {
+auto mount_add(const char* path, Channel* fs_channel, Process* fs_process) -> int {
     if (!path) return -1;
 
     // Replace existing entry if present
@@ -46,7 +46,7 @@ int mount_add(const char* path, Channel* fs_channel, Process* fs_process) {
     return 0;
 }
 
-int mount_remove(const char* path) {
+auto mount_remove(const char* path) -> int {
     for (size_t i = 0; i < MAX_MOUNTS; i++) {
         if (!g_mounts[i].active) continue;
         const char* a = g_mounts[i].path;
@@ -64,7 +64,7 @@ int mount_remove(const char* path) {
     return -1;
 }
 
-MountEntry* mount_resolve(const char* path) {
+auto mount_resolve(const char* path) -> MountEntry* {
     MountEntry* best = nullptr;
     size_t best_len = 0;
     for (size_t i = 0; i < MAX_MOUNTS; i++) {

@@ -10,12 +10,12 @@ static uint64_t      s_access_counter = 0;
 // ── Internal helpers ──────────────────────────────────────────────────
 
 // Compute number of sectors per 4096-byte cache line for a device.
-static inline size_t sectors_per_line(BlockDevice* dev) {
+static inline auto sectors_per_line(BlockDevice* dev) -> size_t {
     return 4096 / dev->sector_size;
 }
 
 // Find the cache entry index for (dev, cache_lba), or return BUF_CACHE_SIZE.
-static size_t cache_lookup(BlockDevice* dev, uint64_t cache_lba) {
+static auto cache_lookup(BlockDevice* dev, uint64_t cache_lba) -> size_t {
     for (size_t i = 0; i < BUF_CACHE_SIZE; i++) {
         if (s_cache[i].dev == dev &&
             s_cache[i].lba == cache_lba &&
@@ -28,7 +28,7 @@ static size_t cache_lookup(BlockDevice* dev, uint64_t cache_lba) {
 
 // Find or create a cache slot.
 // Returns index on success, BUF_CACHE_SIZE on OOM.
-static size_t cache_alloc_or_evict(void) {
+static auto cache_alloc_or_evict(void) -> size_t {
     // First pass: reuse an already-vacant slot.
     for (size_t i = 0; i < BUF_CACHE_SIZE; i++) {
         if (s_cache[i].dev == nullptr) {
@@ -70,7 +70,7 @@ static size_t cache_alloc_or_evict(void) {
 
 // ── Public API ────────────────────────────────────────────────────────
 
-void bufcache_init() {
+auto bufcache_init() -> void {
     for (size_t i = 0; i < BUF_CACHE_SIZE; i++) {
         s_cache[i].dev         = nullptr;
         s_cache[i].lba         = 0;
@@ -80,7 +80,7 @@ void bufcache_init() {
     }
 }
 
-int bufcache_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) {
+auto bufcache_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) -> int {
     size_t spl = sectors_per_line(dev);
 
     for (size_t i = 0; i < count; i++) {
@@ -118,7 +118,7 @@ int bufcache_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) {
     return 0;
 }
 
-int bufcache_write(BlockDevice* dev, uint64_t lba, const void* buf, size_t count) {
+auto bufcache_write(BlockDevice* dev, uint64_t lba, const void* buf, size_t count) -> int {
     size_t spl = sectors_per_line(dev);
 
     for (size_t i = 0; i < count; i++) {
@@ -146,7 +146,7 @@ int bufcache_write(BlockDevice* dev, uint64_t lba, const void* buf, size_t count
     return 0;
 }
 
-void bufcache_flush(BlockDevice* dev) {
+auto bufcache_flush(BlockDevice* dev) -> void {
     size_t spl = sectors_per_line(dev);
 
     for (size_t i = 0; i < BUF_CACHE_SIZE; i++) {

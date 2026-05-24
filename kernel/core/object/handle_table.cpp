@@ -4,7 +4,7 @@
 
 // ── HandleTable ─────────────────────────────────────────────────────
 
-void HandleTable::Init() {
+auto HandleTable::Init() -> void {
     // Allocate 4 pages (16KB) for 1024 HandleEntry entries.
     // buddy_alloc_pages returns a physical address; convert to virtual
     // via the direct map for kernel access.
@@ -24,7 +24,7 @@ void HandleTable::Init() {
     free_head_ = 1;
 }
 
-void HandleTable::Destroy() {
+auto HandleTable::Destroy() -> void {
     if (entries_) {
         uint64_t phys = reinterpret_cast<uint64_t>(entries_) - DIRECT_MAP_BASE;
         buddy_free_pages(reinterpret_cast<void*>(phys), 2);
@@ -32,7 +32,7 @@ void HandleTable::Destroy() {
     }
 }
 
-handle_t HandleTable::Alloc(KernelObject* obj, Rights rights) {
+auto HandleTable::Alloc(KernelObject* obj, Rights rights) -> handle_t {
     lock_.lock();
     if (free_head_ == 0 || free_head_ >= MAX_HANDLES) {
         lock_.unlock();
@@ -48,7 +48,7 @@ handle_t HandleTable::Alloc(KernelObject* obj, Rights rights) {
     return h;
 }
 
-void HandleTable::Free(handle_t h) {
+auto HandleTable::Free(handle_t h) -> void {
     if (h == 0 || h >= MAX_HANDLES) return;
     lock_.lock();
     KernelObject* obj = entries_[h].obj;
@@ -62,8 +62,8 @@ void HandleTable::Free(handle_t h) {
     lock_.unlock();
 }
 
-KernelObject* HandleTable::Lookup(handle_t h, Rights needed,
-                                   Rights* out_rights) {
+auto HandleTable::Lookup(handle_t h, Rights needed,
+                          Rights* out_rights) -> KernelObject* {
     if (h == 0 || h >= MAX_HANDLES) return nullptr;
     lock_.lock();
     KernelObject* obj = entries_[h].obj;
@@ -75,8 +75,8 @@ KernelObject* HandleTable::Lookup(handle_t h, Rights needed,
     return obj;
 }
 
-int HandleTable::ForEach(KernelObject** out_objs, handle_t* out_handles,
-                          int max) {
+auto HandleTable::ForEach(KernelObject** out_objs, handle_t* out_handles,
+                           int max) -> int {
     int count = 0;
     lock_.lock();
     for (handle_t h = 1; h < MAX_HANDLES && count < max; h++) {
@@ -94,18 +94,18 @@ int HandleTable::ForEach(KernelObject** out_objs, handle_t* out_handles,
 
 static HandleTable* g_fallback_ht = nullptr;
 
-void handle_table_set_fallback(HandleTable* ht) { g_fallback_ht = ht; }
+auto handle_table_set_fallback(HandleTable* ht) -> void { g_fallback_ht = ht; }
 
-handle_t handle_alloc(KernelObject* obj, Rights rights) {
+auto handle_alloc(KernelObject* obj, Rights rights) -> handle_t {
     if (g_fallback_ht) return g_fallback_ht->Alloc(obj, rights);
     return INVALID_HANDLE;
 }
 
-void handle_free(handle_t h) {
+auto handle_free(handle_t h) -> void {
     if (g_fallback_ht) g_fallback_ht->Free(h);
 }
 
-KernelObject* handle_lookup(handle_t h, Rights needed, Rights* out_rights) {
+auto handle_lookup(handle_t h, Rights needed, Rights* out_rights) -> KernelObject* {
     if (g_fallback_ht) return g_fallback_ht->Lookup(h, needed, out_rights);
     return nullptr;
 }

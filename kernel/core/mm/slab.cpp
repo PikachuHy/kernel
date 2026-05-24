@@ -29,18 +29,18 @@ SlabCache g_caches[NUM_CACHES];
 uint64_t g_hhdm_offset = 0;
 
 // Address translation helper using the stored offset
-inline void* slab_phys_to_virt(uint64_t phys) {
+inline auto slab_phys_to_virt(uint64_t phys) -> void* {
     return reinterpret_cast<void*>(g_hhdm_offset + phys);
 }
 
-int cache_index(size_t size) {
+auto cache_index(size_t size) -> int {
     for (int i = 0; i < NUM_CACHES; i++) {
         if (size <= CACHE_SIZES[i]) return i;
     }
     return -1;
 }
 
-void cache_init(SlabCache* cache, size_t obj_size) {
+auto cache_init(SlabCache* cache, size_t obj_size) -> void {
     cache->obj_size = obj_size;
     size_t effective = obj_size < sizeof(void*) ? sizeof(void*) : obj_size;
     cache->objs_per_slab = (PAGE_SIZE - sizeof(Slab)) / effective;
@@ -49,7 +49,7 @@ void cache_init(SlabCache* cache, size_t obj_size) {
     cache->slabs_free = nullptr;
 }
 
-bool slab_create(SlabCache* cache) {
+auto slab_create(SlabCache* cache) -> bool {
     void* page = buddy_alloc_pages(0);
     if (!page) return false;
 
@@ -75,7 +75,7 @@ bool slab_create(SlabCache* cache) {
     return true;
 }
 
-void* cache_alloc(SlabCache* cache) {
+auto cache_alloc(SlabCache* cache) -> void* {
     // Prefer partially-filled slabs
     if (cache->slabs_partial) {
         Slab* slab = cache->slabs_partial;
@@ -107,26 +107,26 @@ void* cache_alloc(SlabCache* cache) {
 
 } // namespace
 
-void slab_init(uint64_t hhdm_offset) {
+auto slab_init(uint64_t hhdm_offset) -> void {
     g_hhdm_offset = hhdm_offset;
     for (int i = 0; i < NUM_CACHES; i++) {
         cache_init(&g_caches[i], CACHE_SIZES[i]);
     }
 }
 
-void* kmalloc(size_t size) {
+auto kmalloc(size_t size) -> void* {
     int ci = cache_index(size);
     if (ci < 0) return nullptr;
     return cache_alloc(&g_caches[ci]);
 }
 
-void kfree(void* ptr) {
+auto kfree(void* ptr) -> void {
     if (!ptr) return;
 
     // Find the slab header by page-aligning the virtual address
     uint64_t addr = reinterpret_cast<uint64_t>(ptr);
     uint64_t page_addr = addr & ~(PAGE_SIZE - 1);
-    Slab* slab = static_cast<Slab*>(reinterpret_cast<void*>(page_addr));
+    auto* slab = static_cast<Slab*>(reinterpret_cast<void*>(page_addr));
     SlabCache* cache = slab->cache;
 
     bool was_full = (slab->free_count == 0);
@@ -156,10 +156,10 @@ void kfree(void* ptr) {
     }
 }
 
-size_t kmalloc_usable_size(void* ptr) {
+auto kmalloc_usable_size(void* ptr) -> size_t {
     if (!ptr) return 0;
     uint64_t addr = reinterpret_cast<uint64_t>(ptr);
     uint64_t page_addr = addr & ~(PAGE_SIZE - 1);
-    Slab* slab = static_cast<Slab*>(reinterpret_cast<void*>(page_addr));
+    auto* slab = static_cast<Slab*>(reinterpret_cast<void*>(page_addr));
     return slab->cache->obj_size;
 }

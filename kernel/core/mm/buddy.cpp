@@ -18,11 +18,11 @@ size_t g_free_pages = 0;
 inline size_t phys_to_idx(uint64_t phys) { return phys / PAGE_SIZE; }
 inline uint64_t idx_to_phys(size_t idx) { return idx * PAGE_SIZE; }
 
-inline size_t buddy_idx(size_t idx, int order) {
+inline auto buddy_idx(size_t idx, int order) -> size_t {
     return idx ^ (1ULL << order);
 }
 
-void split(size_t idx, int order, int target_order) {
+auto split(size_t idx, int order, int target_order) -> void {
     while (order > target_order) {
         order--;
         size_t bud = idx + (1ULL << order);
@@ -35,7 +35,7 @@ void split(size_t idx, int order, int target_order) {
     g_free_pages -= (1ULL << target_order);
 }
 
-int coalesce(size_t idx, int order) {
+auto coalesce(size_t idx, int order) -> int {
     while (order < BUDDY_MAX_ORDER) {
         size_t bud = buddy_idx(idx, order);
         if (bud >= g_total_pages) break;
@@ -64,7 +64,7 @@ int coalesce(size_t idx, int order) {
 constexpr size_t BUDDY_MAX_PAGES = 256 * 1024;  // 256K pages = 1GB physical
 Page g_page_array[BUDDY_MAX_PAGES];
 
-void buddy_init(uint64_t hhdm_offset, uint64_t page_array_phys) {
+auto buddy_init(uint64_t hhdm_offset, uint64_t page_array_phys) -> void {
     (void)hhdm_offset;
     (void)page_array_phys;
 
@@ -120,7 +120,7 @@ void buddy_init(uint64_t hhdm_offset, uint64_t page_array_phys) {
     }
 }
 
-void* buddy_alloc_pages(size_t order) {
+auto buddy_alloc_pages(size_t order) -> void* {
     if (order > BUDDY_MAX_ORDER) return nullptr;
 
     for (int o = order; o <= BUDDY_MAX_ORDER; o++) {
@@ -136,12 +136,12 @@ void* buddy_alloc_pages(size_t order) {
     return nullptr;
 }
 
-void buddy_free_pages(void* phys_addr, size_t order) {
+auto buddy_free_pages(void* phys_addr, size_t order) -> void {
     if (!phys_addr || order > BUDDY_MAX_ORDER) return;
     size_t idx = phys_to_idx(reinterpret_cast<uint64_t>(phys_addr));
     g_pages[idx].order = static_cast<int>(order);
     coalesce(idx, order);
 }
 
-size_t buddy_free_page_count() { return g_free_pages; }
-size_t buddy_total_pages() { return g_total_pages; }
+auto buddy_free_page_count() -> size_t { return g_free_pages; }
+auto buddy_total_pages() -> size_t { return g_total_pages; }
