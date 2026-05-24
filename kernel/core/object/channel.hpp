@@ -7,6 +7,8 @@
 
 class Channel : public KernelObject {
 public:
+    static constexpr auto kType = KernelObject::Type::Channel;
+
     Channel() : KernelObject(Type::Channel) {}
 
     struct Message {
@@ -27,13 +29,13 @@ public:
     //
     // Kernel code that holds a Channel* directly (no handle) passes
     // from_endpoint_b=false, treating itself as endpoint A.
-    int Write(const void* data, size_t len,
-              const handle_t* handles, size_t num_handles,
-              bool from_endpoint_b = false);
-    int Read(void* buf, size_t buf_size, size_t* out_len,
-             handle_t* handle_buf, size_t buf_capacity,
-             size_t* out_num_handles,
-             bool from_endpoint_b = false);
+    auto Write(const void* data, size_t len,
+               const handle_t* handles, size_t num_handles,
+               bool from_endpoint_b = false) -> int;
+    auto Read(void* buf, size_t buf_size, size_t* out_len,
+              handle_t* handle_buf, size_t buf_capacity,
+              size_t* out_num_handles,
+              bool from_endpoint_b = false) -> int;
 
 private:
     SpinLock lock_;
@@ -46,6 +48,6 @@ private:
     Message* head_b_ = nullptr;   // rx queue for endpoint B
     Message* tail_b_ = nullptr;
 
-    void Enqueue(Message* msg, Message** head, Message** tail);
-    Message* Dequeue(Message** head, Message** tail);
+    auto Enqueue(Message* msg, Message** head, Message** tail) -> void;
+    auto Dequeue(Message** head, Message** tail) -> Message*;
 };

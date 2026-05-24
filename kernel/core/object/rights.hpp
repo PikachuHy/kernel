@@ -14,7 +14,7 @@ struct Rights {
     };
     uint32_t mask = 0;
 
-    bool has(Rights needed) const {
+    auto has(Rights needed) const noexcept -> bool {
         return (mask & needed.mask) == needed.mask;
     }
 };

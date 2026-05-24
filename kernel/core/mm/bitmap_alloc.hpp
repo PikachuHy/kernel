@@ -10,17 +10,17 @@
 // Initialize. bitmap_base_phys is where the bitmap itself lives in physical memory.
 // hhdm_offset is Limine's HHDM offset for accessing physical memory before our
 // direct map is set up.
-void bitmap_init(uint64_t hhdm_offset, uint64_t bitmap_base_phys);
+auto bitmap_init(uint64_t hhdm_offset, uint64_t bitmap_base_phys) -> void;
 
 // Allocate a single zeroed 4KB page. Returns physical address, or 0 if OOM.
-void* bitmap_alloc_page();
+auto bitmap_alloc_page() -> void*;
 
 // Free a single 4KB page.
-void bitmap_free_page(void* phys_addr);
+auto bitmap_free_page(void* phys_addr) -> void;
 
 // Query whether a physical page is currently allocated.
-bool bitmap_is_allocated(uint64_t phys_addr);
+auto bitmap_is_allocated(uint64_t phys_addr) -> bool;
 
 // Statistics
-size_t bitmap_free_page_count();
-size_t bitmap_total_page_count();
+auto bitmap_free_page_count() -> size_t;
+auto bitmap_total_page_count() -> size_t;

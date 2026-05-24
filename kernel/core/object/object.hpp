@@ -10,14 +10,14 @@ public:
         Vmo,
     };
 
-    Type type() const { return type_; }
-    uint32_t refcount() const { return ref_count_; }
+    auto type() const noexcept -> Type { return type_; }
+    auto refcount() const noexcept -> uint32_t { return ref_count_; }
 
-    void AddRef() { ref_count_++; }
-    void Release();
+    auto AddRef() noexcept -> void { ref_count_++; }
+    auto Release() -> void;
 
 protected:
-    explicit KernelObject(Type t) : type_(t), ref_count_(1) {}
+    explicit KernelObject(Type t) noexcept : type_(t), ref_count_(1) {}
     virtual ~KernelObject() = default;
 
 private:

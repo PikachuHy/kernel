@@ -18,14 +18,14 @@ struct BlockDevice {
 };
 
 // Register a block device (add to global list).
-void blkdev_register(BlockDevice* dev);
+auto blkdev_register(BlockDevice* dev) -> void;
 
 // Find a block device by name.
-BlockDevice* blkdev_find(const char* name);
+auto blkdev_find(const char* name) -> BlockDevice*;
 
 // Read/write with buffer cache. count = number of sectors.
-int blkdev_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count);
-int blkdev_write(BlockDevice* dev, uint64_t lba, const void* buf, size_t count);
+auto blkdev_read(BlockDevice* dev, uint64_t lba, void* buf, size_t count) -> int;
+auto blkdev_write(BlockDevice* dev, uint64_t lba, const void* buf, size_t count) -> int;
 
 // Flush all dirty cache entries for a device.
-void blkdev_flush(BlockDevice* dev);
+auto blkdev_flush(BlockDevice* dev) -> void;

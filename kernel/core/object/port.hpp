@@ -9,11 +9,13 @@ class Channel;
 
 class Port : public KernelObject {
 public:
+    static constexpr auto kType = KernelObject::Type::Port;
+
     Port() : KernelObject(Type::Port) {}
 
-    int Accept(handle_t* out_channel);
+    auto Accept(handle_t* out_channel) -> int;
 
-    static int Connect(Port* port, HandleTable& handles, handle_t* out_client_chan);
+    static auto Connect(Port* port, HandleTable& handles, handle_t* out_client_chan) -> int;
 
 private:
     SpinLock lock_;
@@ -26,5 +28,5 @@ private:
 };
 
 // Name Registry (global)
-void    port_register_name(const char* name, Port* port);
-Port*   port_lookup_name(const char* name);
+auto port_register_name(const char* name, Port* port) -> void;
+auto port_lookup_name(const char* name) -> Port*;

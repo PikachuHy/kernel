@@ -15,19 +15,19 @@ struct HandleEntry {
 
 class HandleTable {
 public:
-    void Init();
+    auto Init() -> void;
 
-    handle_t Alloc(KernelObject* obj, Rights rights);
-    void     Free(handle_t h);
-    KernelObject* Lookup(handle_t h, Rights needed = Rights{},
-                         Rights* out_rights = nullptr);
+    auto Alloc(KernelObject* obj, Rights rights) -> handle_t;
+    auto Free(handle_t h) -> void;
+    auto Lookup(handle_t h, Rights needed = Rights{},
+                Rights* out_rights = nullptr) -> KernelObject*;
 
     // For iteration during process teardown. Writes up to `max` entries
     // into out_objs/out_handles. Returns actual count written.
-    int ForEach(KernelObject** out_objs, handle_t* out_handles, int max);
+    auto ForEach(KernelObject** out_objs, handle_t* out_handles, int max) -> int;
 
     // Free the backing array (called during Process teardown).
-    void Destroy();
+    auto Destroy() -> void;
 
 private:
     HandleEntry* entries_;   // buddy-allocated array, 4 pages (16KB for 1024 entries)
@@ -39,9 +39,9 @@ private:
 // These dispatch to a fallback handle table (set to kernel process's table).
 // Remove after all callers are migrated to per-process handles.
 
-void handle_table_set_fallback(HandleTable* ht);
+auto handle_table_set_fallback(HandleTable* ht) -> void;
 
-handle_t      handle_alloc(KernelObject* obj, Rights rights);
-void          handle_free(handle_t h);
-KernelObject* handle_lookup(handle_t h, Rights needed = Rights{},
-                             Rights* out_rights = nullptr);
+auto handle_alloc(KernelObject* obj, Rights rights) -> handle_t;
+auto handle_free(handle_t h) -> void;
+auto handle_lookup(handle_t h, Rights needed = Rights{},
+                   Rights* out_rights = nullptr) -> KernelObject*;

@@ -9,9 +9,11 @@ class Vmo;
 
 class Process : public KernelObject {
 public:
+    static constexpr auto kType = KernelObject::Type::Process;
+
     // Create a process. If kernel_process is true, shares the kernel PML4
     // template. Otherwise allocates a fresh PML4 via vmm_create_user_pml4().
-    static Process* Create(const char* name, bool kernel_process = false);
+    static auto Create(const char* name, bool kernel_process = false) -> Process*;
 
     uint64_t    pml4_phys;    // CR3 value for this process
     VmRegion*   regions;      // sorted intrusive linked list of VmRegions
@@ -24,25 +26,25 @@ public:
 
     // Map a portion of a VMO into this process's address space.
     // Returns false if the range overlaps or allocation fails.
-    bool Map(Vmo* vmo, uint64_t va, uint64_t vmo_offset,
-             uint64_t size, uint64_t flags);
+    auto Map(Vmo* vmo, uint64_t va, uint64_t vmo_offset,
+             uint64_t size, uint64_t flags) -> bool;
 
     // Unmap a previously mapped range, freeing PTEs and the VmRegion.
     // Returns false if no region at `va` was found.
-    bool Unmap(uint64_t va, uint64_t size);
+    auto Unmap(uint64_t va, uint64_t size) -> bool;
 
     // Find the VmRegion containing `va`, or nullptr.
-    VmRegion* FindRegion(uint64_t va);
+    auto FindRegion(uint64_t va) -> VmRegion*;
 
     // Handle a page fault at `fault_addr`. was_write indicates whether
     // the fault was caused by a write. Returns false if the fault
     // cannot be resolved (bad address, permission denied, OOM).
-    bool HandlePageFault(uint64_t fault_addr, bool was_write);
+    auto HandlePageFault(uint64_t fault_addr, bool was_write) -> bool;
 
     // ── Thread management ───────────────────────────────────────
 
-    void AddThread(Thread* t);
-    void RemoveThread(Thread* t);
+    auto AddThread(Thread* t) -> void;
+    auto RemoveThread(Thread* t) -> void;
 
 private:
     Process(const char* name, uint64_t pml4);

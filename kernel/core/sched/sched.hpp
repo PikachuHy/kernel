@@ -53,13 +53,13 @@ struct RunQueue {
     uint8_t  bitmap;                    // bit i set if heads[i] != nullptr
     uint32_t count;                     // total threads in queue
 
-    void init() {
+    auto init() noexcept -> void {
         for (int i = 0; i < SCHED_PRIORITIES; i++) heads[i] = nullptr;
         bitmap = 0; count = 0;
     }
 
     // Append to tail: FIFO per priority for round-robin fairness.
-    void push(Thread* t) {
+    auto push(Thread* t) noexcept -> void {
         int p = t->priority & 7;
         t->next = nullptr;
         if (!heads[p]) {
@@ -73,7 +73,7 @@ struct RunQueue {
         count++;
     }
 
-    Thread* pop() {
+    auto pop() noexcept -> Thread* {
         if (bitmap == 0) return nullptr;
         // Find highest-priority non-empty queue
         int prio = __builtin_ctz(bitmap);
@@ -84,7 +84,7 @@ struct RunQueue {
         return t;
     }
 
-    void remove(Thread* target) {
+    auto remove(Thread* target) noexcept -> void {
         // Walk all queues to find and remove target
         for (int i = 0; i < SCHED_PRIORITIES; i++) {
             Thread** prev = &heads[i];
@@ -101,7 +101,7 @@ struct RunQueue {
 
     // Steal one thread from the back (lowest priority) of another CPU's queue.
     // Used for SMP work stealing.
-    Thread* steal_one() {
+    auto steal_one() noexcept -> Thread* {
         if (count == 0) return nullptr;
         for (int i = SCHED_PRIORITIES - 1; i >= 0; i--) {
             if (heads[i]) {
@@ -119,24 +119,24 @@ struct RunQueue {
 // ── Scheduler API ──────────────────────────────────────────
 
 // Threads: create, start (make ready), yield (voluntary), exit
-Thread* thread_create(void (*entry)(), const char* name, uint8_t priority,
-                      Process* process = nullptr);
-void    thread_start(Thread* t);
-void    thread_yield();
-[[noreturn]] void thread_exit();
+auto thread_create(void (*entry)(), const char* name, uint8_t priority,
+                   Process* process = nullptr) -> Thread*;
+auto thread_start(Thread* t) -> void;
+auto thread_yield() -> void;
+[[noreturn]] auto thread_exit() -> void;
 
 // Scheduler lifecycle
-void scheduler_init(uint64_t hhdm);
-void scheduler_start();       // enables interrupts, never returns
-void scheduler_tick();        // called from timer ISR
-void scheduler_schedule();    // pick next, context switch
+auto scheduler_init(uint64_t hhdm) -> void;
+auto scheduler_start() -> void;       // enables interrupts, never returns
+auto scheduler_tick() -> void;        // called from timer ISR
+auto scheduler_schedule() -> void;    // pick next, context switch
 
 // Current thread accessor
-Thread* current_thread();
+auto current_thread() -> Thread*;
 
 // Idle thread (per-CPU)
-Thread* get_idle_thread();
+auto get_idle_thread() -> Thread*;
 
 // ── Assembly: context switch ────────────────────────────────
 // Saves callee-saved regs to prev->rsp chain, loads next->rsp chain.
-extern "C" void switch_to(Thread* prev, Thread* next);
+extern "C" auto switch_to(Thread* prev, Thread* next) -> void;

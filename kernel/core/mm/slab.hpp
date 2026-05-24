@@ -8,14 +8,14 @@
 
 // Initialize slab caches. Must be called after buddy_init().
 // hhdm_offset: direct-map offset (DIRECT_MAP_BASE in kernel, heap offset in host tests).
-void slab_init(uint64_t hhdm_offset);
+auto slab_init(uint64_t hhdm_offset) -> void;
 
 // Allocate memory. Rounds size up to the nearest size class.
 // Returns nullptr for sizes > 2048 or OOM.
-void* kmalloc(size_t size);
+auto kmalloc(size_t size) -> void*;
 
 // Free memory previously allocated by kmalloc.
-void kfree(void* ptr);
+auto kfree(void* ptr) -> void;
 
 // Return the actual allocated size (>= requested due to rounding).
-size_t kmalloc_usable_size(void* ptr);
+auto kmalloc_usable_size(void* ptr) -> size_t;
