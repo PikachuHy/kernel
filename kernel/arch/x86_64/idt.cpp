@@ -61,7 +61,7 @@ const char* exception_names[] = {
 
 } // namespace
 
-void idt_set_gate(uint8_t vector, uint64_t handler, uint8_t ist, uint8_t type_attr) {
+auto idt_set_gate(uint8_t vector, uint64_t handler, uint8_t ist, uint8_t type_attr) -> void {
     idt[vector].offset_low = handler & 0xFFFF;
     idt[vector].offset_mid = (handler >> 16) & 0xFFFF;
     idt[vector].offset_high = (handler >> 32) & 0xFFFFFFFF;
@@ -73,7 +73,7 @@ void idt_set_gate(uint8_t vector, uint64_t handler, uint8_t ist, uint8_t type_at
 
 namespace {
 
-extern "C" void exception_handler(InterruptFrame* frame) {
+extern "C" auto exception_handler(InterruptFrame* frame) -> void {
     // #PF: try to handle via demand paging / COW
     if (frame->int_no == 14) {
         uint64_t cr2;
@@ -269,7 +269,7 @@ extern "C" {
     void irq_stub_44(); void irq_stub_45(); void irq_stub_46(); void irq_stub_47();
 }
 
-void idt_init() {
+auto idt_init() -> void {
     idt_set_gate(0, (uint64_t)&isr_exc0, 0, 0x8E);
     idt_set_gate(1, (uint64_t)&isr_exc1, 0, 0x8E);
     idt_set_gate(2, (uint64_t)&isr_exc2, 0, 0x8E);

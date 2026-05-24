@@ -12,7 +12,7 @@ static PciDevice* device_list_tail = nullptr;
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-uint32_t pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) {
+auto pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) -> uint32_t {
     uint32_t addr = (1UL << 31)
                   | (static_cast<uint32_t>(bus)  << 16)
                   | ((static_cast<uint32_t>(dev)  & 0x1F) << 11)
@@ -22,23 +22,23 @@ uint32_t pci_config_read(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset)
     return x86::inl(PCI_CONFIG_DATA);
 }
 
-uint16_t pci_config_read16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) {
+auto pci_config_read16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) -> uint16_t {
     uint32_t val = pci_config_read(bus, dev, func, offset & ~0x3);
     return static_cast<uint16_t>((val >> ((offset & 0x2) * 8)) & 0xFFFF);
 }
 
-static uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) {
+static auto pci_config_read8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) -> uint8_t {
     uint32_t val = pci_config_read(bus, dev, func, offset & ~0x3);
     return static_cast<uint8_t>((val >> ((offset & 0x3) * 8)) & 0xFF);
 }
 
-static uint32_t pci_config_read32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) {
+static auto pci_config_read32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) -> uint32_t {
     return pci_config_read(bus, dev, func, offset);
 }
 
 // ── Device list helpers ───────────────────────────────────────────────────────
 
-static void pci_add_device(uint8_t bus, uint8_t dev, uint8_t func) {
+static auto pci_add_device(uint8_t bus, uint8_t dev, uint8_t func) -> void {
     // Vendor & device ID (offset 0x00)
     uint32_t id       = pci_config_read32(bus, dev, func, 0x00);
     uint16_t vendor_id = id & 0xFFFF;
@@ -68,7 +68,7 @@ static void pci_add_device(uint8_t bus, uint8_t dev, uint8_t func) {
     }
 
     // Allocate and populate device node
-    PciDevice* pd = static_cast<PciDevice*>(kmalloc(sizeof(PciDevice)));
+    auto* pd = static_cast<PciDevice*>(kmalloc(sizeof(PciDevice)));
     if (!pd) return;
 
     pd->bus        = bus;
@@ -105,7 +105,7 @@ static void pci_add_device(uint8_t bus, uint8_t dev, uint8_t func) {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-void pci_init() {
+auto pci_init() -> void {
     // Triple-loop: bus 0..255, device 0..31, function 0..7
     // For each bus: check device at function 0 first; if vendor==0xFFFF, skip.
     // If multi-function (header_type bit 7), scan functions 1..7.
@@ -130,11 +130,11 @@ void pci_init() {
     }
 }
 
-PciDevice* pci_first_device() {
+auto pci_first_device() -> PciDevice* {
     return device_list;
 }
 
-PciDevice* pci_find_by_class(uint8_t class_code, uint8_t subclass) {
+auto pci_find_by_class(uint8_t class_code, uint8_t subclass) -> PciDevice* {
     PciDevice* cur = device_list;
     while (cur) {
         if (cur->class_code == class_code && cur->subclass == subclass)

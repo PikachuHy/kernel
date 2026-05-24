@@ -30,26 +30,26 @@ namespace {
 syscall_handler_t g_handler = nullptr;
 
 // Get the current process, or nullptr if no thread/process exists
-static Process* current_process() {
+static auto current_process() -> Process* {
     Thread* t = current_thread();
     return t ? t->process : nullptr;
 }
 
 // ── Syscall handlers ────────────────────────────────────────────
 
-uint64_t sys_debug_print(uint64_t a1, uint64_t, uint64_t, uint64_t) {
+auto sys_debug_print(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
     if (a1) klog(reinterpret_cast<const char*>(a1));
     return 0;
 }
 
-uint64_t sys_handle_close(uint64_t a1, uint64_t, uint64_t, uint64_t) {
+auto sys_handle_close(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return -1;
     proc->handles.Free(static_cast<handle_t>(a1));
     return 0;
 }
 
-uint64_t sys_handle_dup(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
+auto sys_handle_dup(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
@@ -64,11 +64,11 @@ uint64_t sys_handle_dup(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     return proc->handles.Alloc(obj, new_rights);
 }
 
-uint64_t sys_channel_create(uint64_t, uint64_t, uint64_t, uint64_t) {
+auto sys_channel_create(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
-    Channel* ch = static_cast<Channel*>(kmalloc(sizeof(Channel)));
+    auto* ch = static_cast<Channel*>(kmalloc(sizeof(Channel)));
     if (!ch) return INVALID_HANDLE;
     new (ch) Channel();
 
@@ -82,7 +82,7 @@ uint64_t sys_channel_create(uint64_t, uint64_t, uint64_t, uint64_t) {
     return (static_cast<uint64_t>(a) << 32) | b;
 }
 
-uint64_t sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
+auto sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return -1;
 
@@ -108,7 +108,7 @@ uint64_t sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
         args->data, args->data_len, args->handles, args->num_handles, endpoint_b);
 }
 
-uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
+auto sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return static_cast<uint64_t>(-1);
 
@@ -125,7 +125,7 @@ uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
     int rc;
 
     // Block until a message is available
-    Channel* ch = static_cast<Channel*>(obj);
+    auto* ch = static_cast<Channel*>(obj);
     while (true) {
         rc = ch->Read(
             reinterpret_cast<void*>(a2), a3, &out_len,
@@ -137,7 +137,7 @@ uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
     return (rc == 0) ? out_len : static_cast<uint64_t>(rc);
 }
 
-uint64_t sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
+auto sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return static_cast<uint64_t>(-1);
 
@@ -175,11 +175,11 @@ uint64_t sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_
     return static_cast<uint64_t>(rc);
 }
 
-uint64_t sys_port_create(uint64_t, uint64_t, uint64_t, uint64_t) {
+auto sys_port_create(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
-    Port* port = static_cast<Port*>(kmalloc(sizeof(Port)));
+    auto* port = static_cast<Port*>(kmalloc(sizeof(Port)));
     if (!port) return INVALID_HANDLE;
     new (port) Port();
 
@@ -190,7 +190,7 @@ uint64_t sys_port_create(uint64_t, uint64_t, uint64_t, uint64_t) {
     return h;
 }
 
-uint64_t sys_port_register(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
+auto sys_port_register(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return -1;
 
@@ -203,7 +203,7 @@ uint64_t sys_port_register(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     return 0;
 }
 
-uint64_t sys_port_connect(uint64_t a1, uint64_t, uint64_t, uint64_t) {
+auto sys_port_connect(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
@@ -217,7 +217,7 @@ uint64_t sys_port_connect(uint64_t a1, uint64_t, uint64_t, uint64_t) {
     return new_chan;
 }
 
-uint64_t sys_port_accept(uint64_t a1, uint64_t, uint64_t, uint64_t) {
+auto sys_port_accept(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
@@ -231,7 +231,7 @@ uint64_t sys_port_accept(uint64_t a1, uint64_t, uint64_t, uint64_t) {
 }
 
 // Process syscalls
-uint64_t sys_process_create(uint64_t a1, uint64_t, uint64_t, uint64_t) {
+auto sys_process_create(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
     const char* name = reinterpret_cast<const char*>(a1);
     Process* new_proc = Process::Create(name);
     if (!new_proc) return INVALID_HANDLE;
@@ -249,12 +249,12 @@ uint64_t sys_process_create(uint64_t a1, uint64_t, uint64_t, uint64_t) {
     return h;
 }
 
-uint64_t sys_process_exit(uint64_t, uint64_t, uint64_t, uint64_t) {
+auto sys_process_exit(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
     thread_exit();
     return 0; // unreachable
 }
 
-uint64_t sys_vmo_create(uint64_t a1, uint64_t, uint64_t, uint64_t) {
+auto sys_vmo_create(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
     Process* cur = current_process();
     if (!cur) return INVALID_HANDLE;
 
@@ -268,7 +268,7 @@ uint64_t sys_vmo_create(uint64_t a1, uint64_t, uint64_t, uint64_t) {
     return h;
 }
 
-uint64_t sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
+auto sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint64_t {
     Process* cur = current_process();
     if (!cur) return -1;
 
@@ -276,7 +276,7 @@ uint64_t sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
     KernelObject* obj = cur->handles.Lookup(h);
     if (!obj || obj->type() != KernelObject::Type::Vmo) return -1;
 
-    Vmo* vmo = static_cast<Vmo*>(obj);
+    auto* vmo = static_cast<Vmo*>(obj);
     uint64_t va = a2;
     uint64_t flags = a3;
     uint64_t vmo_offset = a4;
@@ -290,7 +290,7 @@ uint64_t sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
 
 // ── VFS syscalls ──────────────────────────────────────────────────
 
-uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
+auto sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
     // Stack variables declared up front for predictable frame layout.
     const char* path;
     uint64_t flags;
@@ -387,7 +387,7 @@ uint64_t sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     return client_handle;
 }
 
-uint64_t sys_mount(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
+auto sys_mount(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
     const char* path = reinterpret_cast<const char*>(a1);
     handle_t h = static_cast<handle_t>(a2);
 
@@ -398,7 +398,7 @@ uint64_t sys_mount(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
     if (!obj || obj->type() != KernelObject::Type::Channel)
         return static_cast<uint64_t>(-1);
 
-    Channel* ch = static_cast<Channel*>(obj);
+    auto* ch = static_cast<Channel*>(obj);
 
     // The FS server process is the current thread's process
     Process* fs_proc = current_thread()->process;
@@ -408,7 +408,7 @@ uint64_t sys_mount(uint64_t a1, uint64_t a2, uint64_t, uint64_t) {
 
 // ── Block device syscalls ──────────────────────────────────────────
 
-uint64_t sys_blkdev_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
+auto sys_blkdev_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint64_t {
     const char* name = reinterpret_cast<const char*>(a1);
     uint64_t lba = a2;
     void* buf = reinterpret_cast<void*>(a3);
@@ -421,7 +421,7 @@ uint64_t sys_blkdev_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
     return static_cast<uint64_t>(rc);
 }
 
-uint64_t sys_blkdev_write(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
+auto sys_blkdev_write(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint64_t {
     const char* name = reinterpret_cast<const char*>(a1);
     uint64_t lba = a2;
     const void* buf = reinterpret_cast<const void*>(a3);
@@ -436,7 +436,7 @@ uint64_t sys_blkdev_write(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
 
 // ── Serial I/O ───────────────────────────────────────────────────
 
-uint64_t sys_serial_read(uint64_t, uint64_t, uint64_t, uint64_t) {
+auto sys_serial_read(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
     uint8_t byte;
     // Spin-wait on serial port data-ready (LSR bit 0).
     while (true) {
@@ -460,7 +460,7 @@ using syscall_fn_t = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t);
 constexpr int MAX_SYSCALL = 55;
 syscall_fn_t g_syscall_table[MAX_SYSCALL];
 
-void init_syscall_table() {
+auto init_syscall_table() -> void {
     g_syscall_table[SYSCALL_DEBUG_PRINT]    = sys_debug_print;
     g_syscall_table[SYSCALL_HANDLE_CLOSE]   = sys_handle_close;
     g_syscall_table[SYSCALL_HANDLE_DUP]     = sys_handle_dup;
@@ -483,8 +483,8 @@ void init_syscall_table() {
     g_syscall_table[SYSCALL_SERIAL_READ]    = sys_serial_read;
 }
 
-extern "C" uint64_t syscall_dispatcher(uint64_t num, uint64_t a1, uint64_t a2,
-                                        uint64_t a3, uint64_t a4) {
+extern "C" auto syscall_dispatcher(uint64_t num, uint64_t a1, uint64_t a2,
+                                        uint64_t a3, uint64_t a4) -> uint64_t {
     if (num >= MAX_SYSCALL || !g_syscall_table[num]) {
         klog("Syscall #"); klog_hex(num); klog(": invalid\n");
         return 0xFFFFFFFFFFFFFFFFULL;
@@ -493,7 +493,7 @@ extern "C" uint64_t syscall_dispatcher(uint64_t num, uint64_t a1, uint64_t a2,
 }
 } // namespace
 
-void syscall_init() {
+auto syscall_init() -> void {
     init_syscall_table();
 
     uint64_t efer = x86::rdmsr(IA32_EFER);
@@ -514,4 +514,4 @@ void syscall_init() {
     klog(" SCE=enabled\n");
 }
 
-void syscall_set_handler(syscall_handler_t h) { g_handler = h; }
+auto syscall_set_handler(syscall_handler_t h) -> void { g_handler = h; }

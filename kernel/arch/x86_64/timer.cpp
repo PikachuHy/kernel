@@ -17,13 +17,13 @@ uint64_t g_uptime_ms = 0;
 timer_callback_t g_oneshot_cb = nullptr;
 timer_callback_t g_periodic_cb = nullptr;
 
-void lapic_timer_unmask(uint8_t vector, bool periodic) {
+auto lapic_timer_unmask(uint8_t vector, bool periodic) -> void {
     uint32_t lvt = vector;
     if (periodic) lvt |= (1 << 17);  // periodic mode
     lapic_write(LAPIC_LVT_TIMER, lvt);
 }
 
-bool timer_handler(uint8_t) {
+auto timer_handler(uint8_t) -> bool {
     g_uptime_ms++;
     if (g_oneshot_cb) {
         auto cb = g_oneshot_cb; g_oneshot_cb = nullptr;
@@ -40,7 +40,7 @@ bool timer_handler(uint8_t) {
 
 } // namespace
 
-void timer_init(uint64_t hhdm) {
+auto timer_init(uint64_t hhdm) -> void {
     (void)hhdm;
     g_uptime_ms = 0;
     g_ticks_per_ms = 0;
@@ -84,7 +84,7 @@ void timer_init(uint64_t hhdm) {
     klog("Timer: hardware init complete\n");
 }
 
-void timer_oneshot(uint64_t delay_us, timer_callback_t cb) {
+auto timer_oneshot(uint64_t delay_us, timer_callback_t cb) -> void {
     if (!g_ticks_per_ms || !cb) return;
     g_oneshot_cb = cb;
     uint64_t ticks = (delay_us * g_ticks_per_ms) / 1000;
@@ -95,7 +95,7 @@ void timer_oneshot(uint64_t delay_us, timer_callback_t cb) {
     lapic_timer_unmask(TIMER_VEC, false);
 }
 
-void timer_periodic(uint64_t interval_us, timer_callback_t cb) {
+auto timer_periodic(uint64_t interval_us, timer_callback_t cb) -> void {
     if (!g_ticks_per_ms || !cb) return;
     g_periodic_cb = cb;
     uint64_t ticks = (interval_us * g_ticks_per_ms) / 1000;
@@ -106,5 +106,5 @@ void timer_periodic(uint64_t interval_us, timer_callback_t cb) {
     lapic_write(LAPIC_TIMER_INIT, static_cast<uint32_t>(ticks));
 }
 
-uint64_t timer_uptime_ms() { return g_uptime_ms; }
-uint64_t timer_ticks_per_ms() { return g_ticks_per_ms; }
+auto timer_uptime_ms() -> uint64_t { return g_uptime_ms; }
+auto timer_ticks_per_ms() -> uint64_t { return g_ticks_per_ms; }

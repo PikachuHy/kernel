@@ -20,13 +20,13 @@ extern "C" {
     extern uint8_t tr_gdtr[];
 }
 
-void spinlock_acquire(Spinlock* lock) {
+auto spinlock_acquire(Spinlock* lock) -> void {
     while (__atomic_test_and_set(&lock->locked, __ATOMIC_ACQUIRE)) {
         asm volatile("pause" ::: "memory");
     }
 }
 
-void spinlock_release(Spinlock* lock) {
+auto spinlock_release(Spinlock* lock) -> void {
     __atomic_clear(&lock->locked, __ATOMIC_RELEASE);
 }
 
@@ -38,7 +38,7 @@ static uint64_t g_smp_hhdm = 0;
 static Spinlock g_log_lock;
 
 // Compute trampoline symbol offsets and patch data fields.
-static void patch_trampoline_data(uint64_t tramp_phys, uint64_t cr3) {
+static auto patch_trampoline_data(uint64_t tramp_phys, uint64_t cr3) -> void {
     uint8_t* tramp_virt = reinterpret_cast<uint8_t*>(g_smp_hhdm + tramp_phys);
 
     // Patch CR3 and entry point
@@ -55,7 +55,7 @@ static void patch_trampoline_data(uint64_t tramp_phys, uint64_t cr3) {
     *reinterpret_cast<uint32_t*>(tramp_virt + off_gdtr + 2) = static_cast<uint32_t>(gdt_phys);
 }
 
-uint32_t smp_init(uint64_t hhdm, uint64_t rsdp_phys) {
+auto smp_init(uint64_t hhdm, uint64_t rsdp_phys) -> uint32_t {
     g_smp_hhdm = hhdm;
 
     // 1. Discover CPUs via ACPI MADT
@@ -169,7 +169,7 @@ uint32_t smp_init(uint64_t hhdm, uint64_t rsdp_phys) {
     return g_cpu_count;
 }
 
-extern "C" void smp_ap_entry(uint64_t id) {
+extern "C" auto smp_ap_entry(uint64_t id) -> void {
     uint32_t cpu_id   = static_cast<uint32_t>(id & 0xFFFFFFFF);
     uint32_t lapic_id = static_cast<uint32_t>(id >> 32);
 
@@ -203,6 +203,6 @@ extern "C" void smp_ap_entry(uint64_t id) {
     }
 }
 
-uint32_t smp_cpu_count() {
+auto smp_cpu_count() -> uint32_t {
     return g_cpu_count;
 }

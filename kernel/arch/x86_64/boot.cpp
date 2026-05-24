@@ -94,7 +94,7 @@ __attribute__((unused)) static bool timer_preempt_callback(uint64_t) {
     return true;
 }
 
-extern "C" void kernel_entry(void) {
+extern "C" auto kernel_entry() -> void {
     asm volatile("movq %0, %%rsp" : : "r"(&boot_stack[sizeof(boot_stack)]));
 
     serial_init();

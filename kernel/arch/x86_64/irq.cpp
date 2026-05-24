@@ -10,12 +10,12 @@ struct IrqLine { irq_handler_t h[MAX_PER_IRQ]; int count; };
 IrqLine g_irqs[MAX_IRQ];
 } // namespace
 
-void irq_init() {
+auto irq_init() -> void {
     for (auto& irq : g_irqs) { irq.count = 0; for (auto& h : irq.h) h = nullptr; }
     klog("IRQ: table initialized\n");
 }
 
-int irq_register(uint8_t irq, irq_handler_t handler) {
+auto irq_register(uint8_t irq, irq_handler_t handler) -> int {
     if (irq >= MAX_IRQ || !handler) return -1;
     auto& line = g_irqs[irq];
     if (line.count >= MAX_PER_IRQ) return -2;
@@ -23,7 +23,7 @@ int irq_register(uint8_t irq, irq_handler_t handler) {
     return 0;
 }
 
-extern "C" void irq_dispatch(uint8_t vector) {
+extern "C" auto irq_dispatch(uint8_t vector) -> void {
     if (vector < 32 || vector >= 48) return;
     // EOI must be sent BEFORE calling handlers. If a handler triggers a
     // context switch (e.g. timer → scheduler_tick → scheduler_schedule →

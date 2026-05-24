@@ -11,13 +11,13 @@ namespace {
 
 uint64_t g_kernel_template_pml4 = 0;
 
-inline uint64_t* hhdm_ptr(uint64_t phys) {
+inline auto hhdm_ptr(uint64_t phys) -> uint64_t* {
     return reinterpret_cast<uint64_t*>(g_hhdm + phys);
 }
 
 // Allocate a zeroed page table page. Returns physical address, or 0 on OOM.
 // buddy_alloc_pages returns a PHYSICAL address (idx_to_phys).
-static uint64_t alloc_table_phys() {
+static auto alloc_table_phys() -> uint64_t {
     void* phys = buddy_alloc_pages(0);
     if (!phys) return 0;
     uint64_t phys_addr = reinterpret_cast<uint64_t>(phys);
@@ -29,7 +29,7 @@ static uint64_t alloc_table_phys() {
 // Walk the page table for `va`, creating intermediate page tables as needed.
 // On return, *pte_out points to the leaf PTE slot (accessed via HHDM).
 // Returns true on success, false on OOM.
-static bool walk_create(uint64_t pml4_phys, uint64_t va, uint64_t** pte_out) {
+static auto walk_create(uint64_t pml4_phys, uint64_t va, uint64_t** pte_out) -> bool {
     uint16_t i4 = pml4_index(va);
     uint16_t i3 = pdpt_index(va);
     uint16_t i2 = pd_index(va);
@@ -87,11 +87,11 @@ static bool walk_create(uint64_t pml4_phys, uint64_t va, uint64_t** pte_out) {
 
 } // namespace
 
-void paging_init(
+auto paging_init(
     uint64_t hhdm,
     uint64_t kernel_phys_base,
     uint64_t kernel_virt_base,
-    uint64_t kernel_size)
+    uint64_t kernel_size) -> void
 {
     g_hhdm = hhdm;
 
@@ -173,7 +173,7 @@ void paging_init(
     klog("Paging: kernel PML4 active\n");
 }
 
-void paging_save_kernel_template() {
+auto paging_save_kernel_template() -> void {
     uint64_t cr3;
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
     g_kernel_template_pml4 = cr3;
@@ -181,11 +181,11 @@ void paging_save_kernel_template() {
     klog_hex(cr3); klog("\n");
 }
 
-uint64_t paging_kernel_pml4_template() {
+auto paging_kernel_pml4_template() -> uint64_t {
     return g_kernel_template_pml4;
 }
 
-bool page_table_map(uint64_t pml4_phys, uint64_t va, uint64_t pa, uint64_t flags) {
+auto page_table_map(uint64_t pml4_phys, uint64_t va, uint64_t pa, uint64_t flags) -> bool {
     uint64_t* pte = nullptr;
     if (!walk_create(pml4_phys, va, &pte)) return false;
     *pte = make_pte(pa, flags);
@@ -193,7 +193,7 @@ bool page_table_map(uint64_t pml4_phys, uint64_t va, uint64_t pa, uint64_t flags
     return true;
 }
 
-uint64_t page_table_unmap(uint64_t pml4_phys, uint64_t va) {
+auto page_table_unmap(uint64_t pml4_phys, uint64_t va) -> uint64_t {
     uint16_t i4 = pml4_index(va);
     uint16_t i3 = pdpt_index(va);
     uint16_t i2 = pd_index(va);
@@ -215,7 +215,7 @@ uint64_t page_table_unmap(uint64_t pml4_phys, uint64_t va) {
     return old_pa;
 }
 
-uint64_t page_table_lookup(uint64_t pml4_phys, uint64_t va) {
+auto page_table_lookup(uint64_t pml4_phys, uint64_t va) -> uint64_t {
     uint16_t i4 = pml4_index(va);
     uint16_t i3 = pdpt_index(va);
     uint16_t i2 = pd_index(va);

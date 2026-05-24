@@ -8,11 +8,11 @@ uint64_t g_lapic_phys  = LAPIC_BASE_PHYS;
 uint64_t g_ioapic_phys = IOAPIC_BASE_PHYS;
 bool     g_apic_ready = false;
 
-void ioapic_write(uint8_t reg, uint32_t value) {
+auto ioapic_write(uint8_t reg, uint32_t value) -> void {
     x86::mmio_write32(g_hhdm, g_ioapic_phys + IOAPIC_IOREGSEL, reg);
     x86::mmio_write32(g_hhdm, g_ioapic_phys + IOAPIC_IOWIN, value);
 }
-uint32_t ioapic_read(uint8_t reg) {
+auto ioapic_read(uint8_t reg) -> uint32_t {
     x86::mmio_write32(g_hhdm, g_ioapic_phys + IOAPIC_IOREGSEL, reg);
     return x86::mmio_read32(g_hhdm, g_ioapic_phys + IOAPIC_IOWIN);
 }
@@ -20,7 +20,7 @@ uint32_t ioapic_read(uint8_t reg) {
 
 // --- LAPIC ------------------------------------------------------
 
-void lapic_init(uint64_t hhdm) {
+auto lapic_init(uint64_t hhdm) -> void {
     g_hhdm = hhdm;
     klog("LAPIC: base="); klog_hex(g_lapic_phys); klog("\n");
 
@@ -39,20 +39,20 @@ void lapic_init(uint64_t hhdm) {
     klog("LAPIC: enabled\n");
 }
 
-void lapic_eoi() { lapic_write(LAPIC_EOI, 0); }
+auto lapic_eoi() -> void { lapic_write(LAPIC_EOI, 0); }
 
-bool apic_is_ready() { return g_apic_ready; }
+auto apic_is_ready() -> bool { return g_apic_ready; }
 
-uint32_t lapic_read(uint16_t offset) {
+auto lapic_read(uint16_t offset) -> uint32_t {
     return x86::mmio_read32(g_hhdm, g_lapic_phys + offset);
 }
-void lapic_write(uint16_t offset, uint32_t value) {
+auto lapic_write(uint16_t offset, uint32_t value) -> void {
     x86::mmio_write32(g_hhdm, g_lapic_phys + offset, value);
 }
 
 // --- PIC and I/O APIC -------------------------------------------
 
-void pic_disable() {
+auto pic_disable() -> void {
     // ICW1: init + edge + cascade
     x86::outb(PIC1_CMD, 0x11);
     x86::outb(PIC2_CMD, 0x11);
@@ -71,7 +71,7 @@ void pic_disable() {
     klog("PIC: disabled\n");
 }
 
-void ioapic_init(uint64_t hhdm) {
+auto ioapic_init(uint64_t hhdm) -> void {
     g_hhdm = hhdm;
 
     klog("IOAPIC: base="); klog_hex(g_ioapic_phys); klog("\n");
@@ -92,7 +92,7 @@ void ioapic_init(uint64_t hhdm) {
     klog("IOAPIC: IRQ1->v33 routed\n");
 }
 
-void lapic_send_ipi(uint32_t lapic_id, uint32_t icr_lo) {
+auto lapic_send_ipi(uint32_t lapic_id, uint32_t icr_lo) -> void {
     lapic_write(LAPIC_ICR_HI, lapic_id << 24);
     lapic_write(LAPIC_ICR_LO, icr_lo);
     // Wait for delivery with timeout (~10ms)
@@ -102,7 +102,7 @@ void lapic_send_ipi(uint32_t lapic_id, uint32_t icr_lo) {
     }
 }
 
-void lapic_send_init(uint32_t lapic_id) {
+auto lapic_send_init(uint32_t lapic_id) -> void {
     lapic_send_ipi(lapic_id, ICR_INIT | ICR_ASSERT | ICR_LEVEL);
     for (int i = 0; i < 10000000; i++) {
         asm volatile("pause" ::: "memory");
@@ -113,11 +113,11 @@ void lapic_send_init(uint32_t lapic_id) {
     }
 }
 
-void lapic_send_sipi(uint32_t lapic_id, uint8_t vector) {
+auto lapic_send_sipi(uint32_t lapic_id, uint8_t vector) -> void {
     lapic_send_ipi(lapic_id, ICR_STARTUP | vector);
 }
 
-void ioapic_route_irq(uint8_t irq, uint8_t vector, uint8_t lapic_id) {
+auto ioapic_route_irq(uint8_t irq, uint8_t vector, uint8_t lapic_id) -> void {
     uint8_t lo = IOAPIC_REDTBL + 2 * irq;
     ioapic_write(lo, vector);  // fixed delivery, physical dest, unmasked
     ioapic_write(lo + 1, static_cast<uint32_t>(lapic_id) << 24);

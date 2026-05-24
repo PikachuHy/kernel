@@ -12,7 +12,7 @@ constexpr int GDT_ENTRIES = 7;
 GDTEntry gdt[GDT_ENTRIES];
 GDTR gdtr;
 
-void set_entry(int idx, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags) {
+auto set_entry(int idx, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags) -> void {
     gdt[idx].base_low = base & 0xFFFF;
     gdt[idx].base_mid = (base >> 16) & 0xFF;
     gdt[idx].base_high = (base >> 24) & 0xFF;
@@ -39,7 +39,7 @@ struct TSS {
 static uint8_t g_tss_data[sizeof(TSS) + 8192 + 1]
     __attribute__((aligned(PAGE_SIZE)));
 
-void gdt_init() {
+auto gdt_init() -> void {
     // GDT layout chosen so that SYSRET computes correct CS/SS.
     // SYSRET CS = (STAR[63:48] + 16) | 3 → (0x08+16)|3 = 0x1B (entry 3)
     // SYSRET SS = (STAR[63:48] + 8)  | 3 → (0x08+8)|3  = 0x13 (entry 2)
@@ -78,7 +78,7 @@ void gdt_init() {
     );
 }
 
-void tss_init() {
+auto tss_init() -> void {
     TSS* tss = reinterpret_cast<TSS*>(&g_tss_data[0]);
     for (size_t i = 0; i < sizeof(TSS); i++) {
         reinterpret_cast<uint8_t*>(tss)[i] = 0;
@@ -128,7 +128,7 @@ void tss_init() {
     klog(" (I/O bitmap: all ports denied from ring 3)\n");
 }
 
-void tss_set_rsp0(uint64_t rsp0) {
+auto tss_set_rsp0(uint64_t rsp0) -> void {
     TSS* tss = reinterpret_cast<TSS*>(&g_tss_data[0]);
     tss->rsp0 = rsp0;
 }

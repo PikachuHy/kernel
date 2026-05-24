@@ -2,18 +2,18 @@
 #include <stddef.h>
 
 // Convert physical address to virtual via HHDM offset
-inline void* p2v(uint64_t hhdm, uint64_t phys) {
+inline auto p2v(uint64_t hhdm, uint64_t phys) -> void* {
     return reinterpret_cast<void*>(hhdm + phys);
 }
 
 // Validate ACPI table checksum: all bytes must sum to zero mod 256
-static bool checksum_ok(const uint8_t* data, size_t len) {
+static auto checksum_ok(const uint8_t* data, size_t len) -> bool {
     uint8_t sum = 0;
     for (size_t i = 0; i < len; i++) sum += data[i];
     return sum == 0;
 }
 
-int acpi_find_madt(uint64_t hhdm, uint64_t rsdp_phys, const MADT** out_madt) {
+auto acpi_find_madt(uint64_t hhdm, uint64_t rsdp_phys, const MADT** out_madt) -> int {
     *out_madt = nullptr;
 
     auto* rsdp = reinterpret_cast<const RSDP*>(p2v(hhdm, rsdp_phys));
@@ -82,7 +82,7 @@ int acpi_find_madt(uint64_t hhdm, uint64_t rsdp_phys, const MADT** out_madt) {
     return -3;  // MADT not found
 }
 
-int acpi_parse_cpus(const MADT* madt, CpuInfo* cpus, int max_cpus) {
+auto acpi_parse_cpus(const MADT* madt, CpuInfo* cpus, int max_cpus) -> int {
     int count = 0;
     const uint8_t* ptr = reinterpret_cast<const uint8_t*>(madt) + sizeof(MADT);
     const uint8_t* end = reinterpret_cast<const uint8_t*>(madt) + madt->header.length;
