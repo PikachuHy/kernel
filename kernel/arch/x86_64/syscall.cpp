@@ -125,8 +125,9 @@ uint64_t sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) {
     int rc;
 
     // Block until a message is available
+    Channel* ch = static_cast<Channel*>(obj);
     while (true) {
-        rc = static_cast<Channel*>(obj)->Read(
+        rc = ch->Read(
             reinterpret_cast<void*>(a2), a3, &out_len,
             nullptr, 0, &out_handles, endpoint_b);
         if (rc != -2) break;  // -2 = empty
@@ -249,8 +250,6 @@ uint64_t sys_process_create(uint64_t a1, uint64_t, uint64_t, uint64_t) {
 }
 
 uint64_t sys_process_exit(uint64_t, uint64_t, uint64_t, uint64_t) {
-    // Tell QEMU to exit via isa-debug-exit device (port 0xf4).
-    asm volatile("outb %0, %1" : : "a"((uint8_t)0), "Nd"((uint16_t)0xf4));
     thread_exit();
     return 0; // unreachable
 }
@@ -439,14 +438,15 @@ uint64_t sys_blkdev_write(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) {
 
 uint64_t sys_serial_read(uint64_t, uint64_t, uint64_t, uint64_t) {
     uint8_t byte;
-    int idle_count = 0;
+    // Spin-wait on serial port data-ready (LSR bit 0).
     while (true) {
         asm volatile("inb %1, %0" : "=a"(byte) : "Nd"((uint16_t)0x3FD));
         if (byte & 1) break;
-        asm volatile("pause" : : : "memory");
-        if (++idle_count >= 100000000) {
-            thread_yield();
-            idle_count = 0;
+        // Brief pause to reduce KVM exit rate; then check again.
+        // thread_yield() is intentionally omitted — with proper channel
+        // blocking, no other thread needs CPU while shell waits for input.
+        for (int i = 0; i < 1000; i++) {
+            asm volatile("pause" : : : "memory");
         }
     }
     asm volatile("inb %1, %0" : "=a"(byte) : "Nd"((uint16_t)0x3F8));

@@ -241,7 +241,12 @@ void scheduler_schedule() {
     Thread* prev = s_current_threads[0];
 
     // Push prev back to run queue if it is still runnable and not idle.
-    if (prev && prev != s_idle_threads[0] && prev->state != ThreadState::Dead) {
+    // Blocked and Dead threads are NOT re-enqueued — they wait off-queue
+    // for a wakeup (thread_wake sets state→Ready and pushes).
+    if (prev && prev != s_idle_threads[0] &&
+        prev->state != ThreadState::Dead &&
+        prev->state != ThreadState::Blocked &&
+        prev->state != ThreadState::Sleeping) {
         if (prev->state == ThreadState::Running) {
             prev->state = ThreadState::Ready;
         }

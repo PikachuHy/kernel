@@ -9,6 +9,7 @@ using uint8_t  = unsigned char;
 using size_t = decltype(sizeof(0));
 
 constexpr int SYS_DEBUG_PRINT    = 0;
+constexpr int SYS_HANDLE_CLOSE   = 1;
 constexpr int SYS_PROCESS_EXIT   = 31;
 constexpr int SYS_OPEN           = 50;
 constexpr int SYS_CHANNEL_WRITE  = 11;
@@ -85,12 +86,20 @@ __attribute__((unused)) static int channel_read(uint32_t h, void* buf, size_t bu
 extern "C" void _start() {
     print("=== init: test ===\n");
 
-    // Test 1: open /dev/console
+    // Test 1: open /dev/console, then close it so devfs can serve other opens
     uint64_t h = syscall6(SYS_OPEN,
         (uint64_t)"/dev/console", O_WRONLY, 0, 0, 0);
     print("  [1] sys_open('/dev/console'): ");
     print_hex(h);
     print("\n");
+
+    if (h != 0 && h != 0xFFFFFFFF) {
+        // Close /dev/console so devfs returns to mount-channel event loop
+        // and can process FAT32's /dev/ahci0 open.
+        FileMsg close_msg = {FileMsg::Close, 0, 0, 0};
+        channel_write((uint32_t)h, &close_msg, sizeof(close_msg));
+        syscall6(SYS_HANDLE_CLOSE, h, 0, 0, 0, 0);
+    }
 
     // Test 2: open /kernel.elf via FAT32
     uint64_t fh = syscall6(SYS_OPEN,
@@ -115,8 +124,12 @@ extern "C" void _start() {
                 }
             }
         }
-    } else {
-        print("  [3] /kernel.elf NOT FOUND\n");
+    }
+    // Close /kernel.elf so FAT32 returns to mount-channel event loop
+    if (fh != 0 && fh != 0xFFFFFFFF) {
+        FileMsg close_msg = {FileMsg::Close, 0, 0, 0};
+        channel_write((uint32_t)fh, &close_msg, sizeof(close_msg));
+        syscall6(SYS_HANDLE_CLOSE, fh, 0, 0, 0, 0);
     }
 
     print("=== init: done ===\n");

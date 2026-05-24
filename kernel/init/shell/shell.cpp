@@ -16,7 +16,13 @@ static void pd(uint64_t n){if(!n){p("0");return;}char b[21];int i=20;b[i--]=0;wh
 static struct{const void*d;size_t sz;const uint32_t*hnd;size_t n;}sw;
 static int cw(uint32_t h,const void*d,size_t n){sw.d=d;sw.sz=n;sw.hnd=nullptr;sw.n=0;return(int)syscall6(SYS_CHANNEL_WRITE,h,(uint64_t)&sw,0,0,0);}
 static int cr(uint32_t h,void*b,size_t sz){return(int)syscall6(SYS_CHANNEL_READ,h,(uint64_t)b,sz,0,0);}
-static void cc(uint32_t h){syscall6(SYS_HANDLE_CLOSE,h,0,0,0,0);}
+// Close handle: send Close message so FS server (FAT32 handle_file) can
+// return to its mount-channel event loop for the next open request.
+static void cc(uint32_t h){
+    struct{uint32_t op;uint32_t flags;uint64_t offset,length;}cl={5,0,0,0};
+    cw(h,&cl,sizeof cl);
+    syscall6(SYS_HANDLE_CLOSE,h,0,0,0,0);
+}
 static char getc(){return(char)(syscall6(SYS_SERIAL_READ,0,0,0,0,0)&0xFF);}
 static void pc(char c){char s[2]={c,0};p(s);}
 static void rl(char*buf,int mx){

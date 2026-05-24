@@ -263,7 +263,19 @@ Process* elf_load(const void* elf_data, size_t elf_size,
 
     stack_vmo->GetPage(USER_STACK_SIZE - PAGE_SIZE, true);
 
-    // ── Pre-install PTEs for all loaded pages ──────────────────────
+    // Pre-install PTEs for ALL stack pages (not just the top page).
+    // This avoids #PF during ring-3 execution with deep call chains
+    // (e.g. cmd_ls with a 4KB+ buffer on the stack).
+    for (uint64_t off = 0; off < USER_STACK_SIZE; off += PAGE_SIZE) {
+        uint64_t va = stack_va + off;
+        uint64_t phys = stack_vmo->GetPage(off, true);
+        if (phys) {
+            page_table_map(proc->pml4_phys, va, phys,
+                           PageFlags::Present | PageFlags::User | PageFlags::Writable);
+        }
+    }
+
+    // ── Pre-install PTEs for all loaded segments ──────────────────────
     // Walk all VmRegions and install PTEs for committed VMO pages.
     // This avoids #PF handlers with deep call chains during ring-3
     // execution, which would corrupt the IRET frame on the IST stack.
