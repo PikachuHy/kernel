@@ -33,6 +33,7 @@ cc_library(
     ],
     deps = [
         ":klib",
+        "//kernel/core/mm:mm",
     ],
     visibility = ["//visibility:public"],
 )

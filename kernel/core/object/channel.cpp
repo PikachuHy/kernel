@@ -1,6 +1,13 @@
 #include "kernel/core/object/channel.hpp"
 #include "kernel/core/mm/slab.hpp"
+
+// Placement new: use system <new> when available, otherwise provide our own.
+#if __has_include(<new>)
 #include <new>
+#else
+inline void* operator new(size_t, void* p) noexcept { return p; }
+#endif
+
 #include "kernel/lib/scoped_mem.hpp"
 #include "kernel/lib/bitwise.hpp"
 

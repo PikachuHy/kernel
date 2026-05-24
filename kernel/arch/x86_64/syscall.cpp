@@ -37,34 +37,34 @@ static auto current_process() -> Process* {
 
 // ── Syscall handlers ────────────────────────────────────────────
 
-auto sys_debug_print(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
-    if (a1) klog(reinterpret_cast<const char*>(a1));
+auto sys_debug_print(SyscallArgs args) -> uint64_t {
+    if (args.a1) klog(reinterpret_cast<const char*>(args.a1));
     return 0;
 }
 
-auto sys_handle_close(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
+auto sys_handle_close(SyscallArgs args) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return -1;
-    proc->handles.Free(static_cast<handle_t>(a1));
+    proc->handles.Free(static_cast<handle_t>(args.a1));
     return 0;
 }
 
-auto sys_handle_dup(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
+auto sys_handle_dup(SyscallArgs args) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
-    handle_t h = static_cast<handle_t>(a1);
+    handle_t h = static_cast<handle_t>(args.a1);
     Rights needed{.mask = Rights::Duplicate};
     Rights existing;
     KernelObject* obj = proc->handles.Lookup(h, needed, &existing);
     if (!obj) return INVALID_HANDLE;
 
-    Rights new_rights{.mask = static_cast<uint32_t>(a2)};
+    Rights new_rights{.mask = static_cast<uint32_t>(args.a2)};
     new_rights.mask &= existing.mask;
     return proc->handles.Alloc(obj, new_rights);
 }
 
-auto sys_channel_create(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
+auto sys_channel_create(SyscallArgs) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
@@ -82,53 +82,55 @@ auto sys_channel_create(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
     return (static_cast<uint64_t>(a) << 32) | b;
 }
 
-auto sys_channel_write(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
+auto sys_channel_write(SyscallArgs args) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return -1;
 
-    handle_t h = static_cast<handle_t>(a1);
     Rights existing;
-    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Write}, &existing);
-    if (!obj || obj->type() != KernelObject::Type::Channel) return -1;
-
+    proc->handles.Lookup(static_cast<handle_t>(args.a1), Rights{}, &existing);
     bool endpoint_b = (existing.mask & Rights::ChannelEndpointB) != 0;
+
+    auto result = typed_lookup<Channel>(proc->handles, static_cast<handle_t>(args.a1),
+                                         Rights{.mask = Rights::Write});
+    if (!result) return static_cast<uint64_t>(-1);
+    auto* ch = result.value();
 
     // Args packed in struct (4-register ABI can't pass 5 scalars)
     struct ChannelWriteArgs {
         const void* data; size_t data_len;
         const handle_t* handles; size_t num_handles;
     };
-    auto* args = reinterpret_cast<const ChannelWriteArgs*>(a2);
+    auto* write_args = reinterpret_cast<const ChannelWriteArgs*>(args.a2);
 
     // Defensive: reject obviously-bogus user pointers (seen as 0x1 from
     // ring-3 processes with corrupted stack frames).
-    if (reinterpret_cast<uint64_t>(args) < 4096) return -1;
+    if (reinterpret_cast<uint64_t>(write_args) < 4096) return -1;
 
-    return static_cast<Channel*>(obj)->Write(
-        args->data, args->data_len, args->handles, args->num_handles, endpoint_b);
+    return ch->Write(
+        write_args->data, write_args->data_len, write_args->handles, write_args->num_handles, endpoint_b);
 }
 
-auto sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) -> uint64_t {
+auto sys_channel_read(SyscallArgs args) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return static_cast<uint64_t>(-1);
 
-    handle_t h = static_cast<handle_t>(a1);
     Rights existing;
-    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read}, &existing);
-    if (!obj || obj->type() != KernelObject::Type::Channel)
-        return static_cast<uint64_t>(-1);
-
+    proc->handles.Lookup(static_cast<handle_t>(args.a1), Rights{}, &existing);
     bool endpoint_b = (existing.mask & Rights::ChannelEndpointB) != 0;
+
+    auto result = typed_lookup<Channel>(proc->handles, static_cast<handle_t>(args.a1),
+                                         Rights{.mask = Rights::Read});
+    if (!result) return static_cast<uint64_t>(-1);
+    auto* ch = result.value();
 
     size_t out_len = 0;
     size_t out_handles = 0;
     int rc;
 
     // Block until a message is available
-    auto* ch = static_cast<Channel*>(obj);
     while (true) {
         rc = ch->Read(
-            reinterpret_cast<void*>(a2), a3, &out_len,
+            reinterpret_cast<void*>(args.a2), args.a3, &out_len,
             nullptr, 0, &out_handles, endpoint_b);
         if (rc != -2) break;  // -2 = empty
         thread_yield();       // give up CPU, wait for message
@@ -137,24 +139,25 @@ auto sys_channel_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t) -> uint64
     return (rc == 0) ? out_len : static_cast<uint64_t>(rc);
 }
 
-auto sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint64_t {
+auto sys_channel_read_handles(SyscallArgs args) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return static_cast<uint64_t>(-1);
 
-    handle_t h = static_cast<handle_t>(a1);
     Rights existing;
-    KernelObject* obj = proc->handles.Lookup(h, Rights{.mask = Rights::Read}, &existing);
-    if (!obj || obj->type() != KernelObject::Type::Channel)
-        return static_cast<uint64_t>(-1);
-
+    proc->handles.Lookup(static_cast<handle_t>(args.a1), Rights{}, &existing);
     bool endpoint_b = (existing.mask & Rights::ChannelEndpointB) != 0;
+
+    auto result = typed_lookup<Channel>(proc->handles, static_cast<handle_t>(args.a1),
+                                         Rights{.mask = Rights::Read});
+    if (!result) return static_cast<uint64_t>(-1);
+    auto* ch = result.value();
 
     // Args packed in struct (4-register ABI can't pass 5 scalars)
     struct ChannelReadHandleArgs {
         handle_t* handle_buf;
         size_t    buf_capacity;
     };
-    auto* args = reinterpret_cast<const ChannelReadHandleArgs*>(a2);
+    auto* rha = reinterpret_cast<const ChannelReadHandleArgs*>(args.a2);
 
     size_t out_len = 0;
     size_t out_handles = 0;
@@ -162,10 +165,10 @@ auto sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4
 
     // Block until a message is available
     while (true) {
-        rc = static_cast<Channel*>(obj)->Read(
-            reinterpret_cast<void*>(a3), a4, &out_len,
-            args ? args->handle_buf : nullptr,
-            args ? args->buf_capacity : 0,
+        rc = ch->Read(
+            reinterpret_cast<void*>(args.a3), args.a4, &out_len,
+            rha ? rha->handle_buf : nullptr,
+            rha ? rha->buf_capacity : 0,
             &out_handles, endpoint_b);
         if (rc != -2) break;
         thread_yield();
@@ -175,7 +178,7 @@ auto sys_channel_read_handles(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4
     return static_cast<uint64_t>(rc);
 }
 
-auto sys_port_create(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
+auto sys_port_create(SyscallArgs) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
@@ -190,24 +193,23 @@ auto sys_port_create(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
     return h;
 }
 
-auto sys_port_register(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
+auto sys_port_register(SyscallArgs args) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return -1;
 
-    handle_t h = static_cast<handle_t>(a1);
-    KernelObject* obj = proc->handles.Lookup(h);
-    if (!obj || obj->type() != KernelObject::Type::Port) return -1;
+    handle_t h = static_cast<handle_t>(args.a1);
+    auto result = typed_lookup<Port>(proc->handles, h);
+    if (!result) return -1;
 
-    port_register_name(reinterpret_cast<const char*>(a2),
-                       static_cast<Port*>(obj));
+    port_register_name(reinterpret_cast<const char*>(args.a2), result.value());
     return 0;
 }
 
-auto sys_port_connect(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
+auto sys_port_connect(SyscallArgs args) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
-    const char* name = reinterpret_cast<const char*>(a1);
+    const char* name = reinterpret_cast<const char*>(args.a1);
     Port* port = port_lookup_name(name);
     if (!port) return static_cast<uint64_t>(-1);
 
@@ -217,22 +219,22 @@ auto sys_port_connect(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
     return new_chan;
 }
 
-auto sys_port_accept(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
+auto sys_port_accept(SyscallArgs args) -> uint64_t {
     Process* proc = current_process();
     if (!proc) return INVALID_HANDLE;
 
-    handle_t h = static_cast<handle_t>(a1);
-    KernelObject* obj = proc->handles.Lookup(h);
-    if (!obj || obj->type() != KernelObject::Type::Port) return INVALID_HANDLE;
+    handle_t h = static_cast<handle_t>(args.a1);
+    auto result = typed_lookup<Port>(proc->handles, h);
+    if (!result) return INVALID_HANDLE;
 
     handle_t out_chan;
-    int rc = static_cast<Port*>(obj)->Accept(&out_chan);
+    int rc = result.value()->Accept(&out_chan);
     return (rc == 0) ? out_chan : static_cast<uint64_t>(rc);
 }
 
 // Process syscalls
-auto sys_process_create(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
-    const char* name = reinterpret_cast<const char*>(a1);
+auto sys_process_create(SyscallArgs args) -> uint64_t {
+    const char* name = reinterpret_cast<const char*>(args.a1);
     Process* new_proc = Process::Create(name);
     if (!new_proc) return INVALID_HANDLE;
 
@@ -249,16 +251,16 @@ auto sys_process_create(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
     return h;
 }
 
-auto sys_process_exit(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
+auto sys_process_exit(SyscallArgs) -> uint64_t {
     thread_exit();
     return 0; // unreachable
 }
 
-auto sys_vmo_create(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
+auto sys_vmo_create(SyscallArgs args) -> uint64_t {
     Process* cur = current_process();
     if (!cur) return INVALID_HANDLE;
 
-    Vmo* vmo = Vmo::CreateAnonymous(a1);
+    Vmo* vmo = Vmo::CreateAnonymous(args.a1);
     if (!vmo) return INVALID_HANDLE;
 
     Rights r{.mask = Rights::Read | Rights::Write |
@@ -268,18 +270,18 @@ auto sys_vmo_create(uint64_t a1, uint64_t, uint64_t, uint64_t) -> uint64_t {
     return h;
 }
 
-auto sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint64_t {
+auto sys_vmo_map(SyscallArgs args) -> uint64_t {
     Process* cur = current_process();
     if (!cur) return -1;
 
-    handle_t h = static_cast<handle_t>(a1);
-    KernelObject* obj = cur->handles.Lookup(h);
-    if (!obj || obj->type() != KernelObject::Type::Vmo) return -1;
+    handle_t h = static_cast<handle_t>(args.a1);
+    auto result = typed_lookup<Vmo>(cur->handles, h);
+    if (!result) return -1;
+    auto* vmo = result.value();
 
-    auto* vmo = static_cast<Vmo*>(obj);
-    uint64_t va = a2;
-    uint64_t flags = a3;
-    uint64_t vmo_offset = a4;
+    uint64_t va = args.a2;
+    uint64_t flags = args.a3;
+    uint64_t vmo_offset = args.a4;
 
     if (va + vmo->size() < va) return -1; // overflow check
 
@@ -290,7 +292,7 @@ auto sys_vmo_map(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint64_t
 
 // ── VFS syscalls ──────────────────────────────────────────────────
 
-auto sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
+auto sys_open(SyscallArgs args) -> uint64_t {
     // Stack variables declared up front for predictable frame layout.
     const char* path;
     uint64_t flags;
@@ -306,8 +308,8 @@ auto sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
     size_t out_len;
     FileResponse resp;
 
-    path = reinterpret_cast<const char*>(a1);
-    flags = a2;
+    path = reinterpret_cast<const char*>(args.a1);
+    flags = args.a2;
 
     mount = mount_resolve(path);
     if (!mount) return INVALID_HANDLE;
@@ -387,32 +389,29 @@ auto sys_open(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
     return client_handle;
 }
 
-auto sys_mount(uint64_t a1, uint64_t a2, uint64_t, uint64_t) -> uint64_t {
-    const char* path = reinterpret_cast<const char*>(a1);
-    handle_t h = static_cast<handle_t>(a2);
+auto sys_mount(SyscallArgs args) -> uint64_t {
+    const char* path = reinterpret_cast<const char*>(args.a1);
+    handle_t h = static_cast<handle_t>(args.a2);
 
     Process* cur = current_process();
     if (!cur) return static_cast<uint64_t>(-1);
 
-    KernelObject* obj = cur->handles.Lookup(h);
-    if (!obj || obj->type() != KernelObject::Type::Channel)
-        return static_cast<uint64_t>(-1);
-
-    auto* ch = static_cast<Channel*>(obj);
+    auto result = typed_lookup<Channel>(cur->handles, h);
+    if (!result) return static_cast<uint64_t>(-1);
 
     // The FS server process is the current thread's process
     Process* fs_proc = current_thread()->process;
 
-    return static_cast<uint64_t>(mount_add(path, ch, fs_proc));
+    return static_cast<uint64_t>(mount_add(path, result.value(), fs_proc));
 }
 
 // ── Block device syscalls ──────────────────────────────────────────
 
-auto sys_blkdev_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint64_t {
-    const char* name = reinterpret_cast<const char*>(a1);
-    uint64_t lba = a2;
-    void* buf = reinterpret_cast<void*>(a3);
-    size_t count = static_cast<size_t>(a4);
+auto sys_blkdev_read(SyscallArgs args) -> uint64_t {
+    const char* name = reinterpret_cast<const char*>(args.a1);
+    uint64_t lba = args.a2;
+    void* buf = reinterpret_cast<void*>(args.a3);
+    size_t count = static_cast<size_t>(args.a4);
 
     BlockDevice* dev = blkdev_find(name);
     if (!dev) return static_cast<uint64_t>(-1);
@@ -421,11 +420,11 @@ auto sys_blkdev_read(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint
     return static_cast<uint64_t>(rc);
 }
 
-auto sys_blkdev_write(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uint64_t {
-    const char* name = reinterpret_cast<const char*>(a1);
-    uint64_t lba = a2;
-    const void* buf = reinterpret_cast<const void*>(a3);
-    size_t count = static_cast<size_t>(a4);
+auto sys_blkdev_write(SyscallArgs args) -> uint64_t {
+    const char* name = reinterpret_cast<const char*>(args.a1);
+    uint64_t lba = args.a2;
+    const void* buf = reinterpret_cast<const void*>(args.a3);
+    size_t count = static_cast<size_t>(args.a4);
 
     BlockDevice* dev = blkdev_find(name);
     if (!dev) return static_cast<uint64_t>(-1);
@@ -436,7 +435,7 @@ auto sys_blkdev_write(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4) -> uin
 
 // ── Serial I/O ───────────────────────────────────────────────────
 
-auto sys_serial_read(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
+auto sys_serial_read(SyscallArgs) -> uint64_t {
     uint8_t byte;
     // Spin-wait on serial port data-ready (LSR bit 0).
     while (true) {
@@ -455,7 +454,7 @@ auto sys_serial_read(uint64_t, uint64_t, uint64_t, uint64_t) -> uint64_t {
 
 // ── Dispatch table ───────────────────────────────────────────────
 
-using syscall_fn_t = uint64_t (*)(uint64_t, uint64_t, uint64_t, uint64_t);
+using syscall_fn_t = auto (*)(SyscallArgs) -> uint64_t;
 
 constexpr int MAX_SYSCALL = 55;
 syscall_fn_t g_syscall_table[MAX_SYSCALL];
@@ -489,8 +488,10 @@ extern "C" auto syscall_dispatcher(uint64_t num, uint64_t a1, uint64_t a2,
         klog("Syscall #"); klog_hex(num); klog(": invalid\n");
         return 0xFFFFFFFFFFFFFFFFULL;
     }
-    return g_syscall_table[num](a1, a2, a3, a4);
+    SyscallArgs args{a1, a2, a3, a4};
+    return g_syscall_table[num](args);
 }
+
 } // namespace
 
 auto syscall_init() -> void {
