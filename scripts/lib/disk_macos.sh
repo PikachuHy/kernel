@@ -8,6 +8,7 @@ disk_create() {
     LIMINE_DIR="$(brew --prefix limine)/share/limine"
 
     echo "==> Creating bootable disk image..."
+    mkdir -p "$(dirname "$DISK_IMG")"
     rm -f "$DISK_IMG"
     dd if=/dev/zero of="$DISK_IMG" bs=1M count=64 2>/dev/null
 
