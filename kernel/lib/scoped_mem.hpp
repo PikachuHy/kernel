@@ -1,8 +1,7 @@
 // kernel/lib/scoped_mem.hpp
 #pragma once
 #include <stddef.h>
-
-extern void kfree(void* ptr);
+#include "kernel/core/mm/slab.hpp"
 
 namespace km {
 
