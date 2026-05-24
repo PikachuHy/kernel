@@ -1,7 +1,7 @@
 // kernel/lib/result.hpp
 #pragma once
 
-namespace km {
+namespace kstd {
 
 template <typename T>
 class Result {
@@ -44,4 +44,4 @@ private:
     explicit Result(int err) noexcept : error_(err), ok_(false) {}
 };
 
-} // namespace km
+} // namespace kstd

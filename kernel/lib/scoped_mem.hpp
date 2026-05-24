@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include "kernel/core/mm/slab.hpp"
 
-namespace km {
+namespace kstd {
 
 class ScopedMem {
     void* ptr_ = nullptr;
@@ -24,4 +24,4 @@ public:
     auto get() const noexcept -> void* { return ptr_; }
 };
 
-} // namespace km
+} // namespace kstd

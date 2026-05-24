@@ -13,8 +13,8 @@ public:
     Channel() : KernelObject(Type::Channel) {}
 
     struct Message {
-        km::ScopedMem data_mem{nullptr};
-        km::ScopedMem handle_mem{nullptr};
+        kstd::ScopedMem data_mem{nullptr};
+        kstd::ScopedMem handle_mem{nullptr};
         size_t    data_len = 0;
         handle_t* handles = nullptr;
         size_t    num_handles = 0;

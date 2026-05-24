@@ -2,7 +2,7 @@
 #pragma once
 #include <stddef.h>
 
-namespace km {
+namespace kstd {
 
 template <typename T>
 auto copy_bytes(T* dst, const T* src, size_t count) noexcept -> void {
@@ -14,4 +14,4 @@ auto zero_bytes(T* dst, size_t count) noexcept -> void {
     for (size_t i = 0; i < count; i++) dst[i] = T{};
 }
 
-} // namespace km
+} // namespace kstd

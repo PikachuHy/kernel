@@ -48,8 +48,8 @@ auto Channel::Write(const void* data, size_t len,
             kfree(raw);
             return -1;
         }
-        raw->data_mem = km::ScopedMem{buf};
-        km::copy_bytes(buf, static_cast<const uint8_t*>(data), len);
+        raw->data_mem = kstd::ScopedMem{buf};
+        kstd::copy_bytes(buf, static_cast<const uint8_t*>(data), len);
     }
 
     if (num_handles > 0) {
@@ -59,9 +59,9 @@ auto Channel::Write(const void* data, size_t len,
             kfree(raw);
             return -1;
         }
-        raw->handle_mem = km::ScopedMem{hbuf};
+        raw->handle_mem = kstd::ScopedMem{hbuf};
         raw->handles = hbuf;
-        km::copy_bytes(hbuf, handles, num_handles);
+        kstd::copy_bytes(hbuf, handles, num_handles);
     }
 
     lock_.lock();
@@ -88,14 +88,14 @@ auto Channel::Read(void* buf, size_t buf_size, size_t* out_len,
 
     if (buf && msg->data_mem.get() && msg->data_len > 0) {
         auto copy_len = msg->data_len < buf_size ? msg->data_len : buf_size;
-        km::copy_bytes(static_cast<uint8_t*>(buf),
+        kstd::copy_bytes(static_cast<uint8_t*>(buf),
                        static_cast<const uint8_t*>(msg->data_mem.get()), copy_len);
     }
 
     if (out_num_handles) *out_num_handles = msg->num_handles;
     if (handle_buf && msg->handles && msg->num_handles > 0) {
         auto copy_len = msg->num_handles < buf_capacity ? msg->num_handles : buf_capacity;
-        km::copy_bytes(handle_buf, msg->handles, copy_len);
+        kstd::copy_bytes(handle_buf, msg->handles, copy_len);
     }
 
     // ScopedMem destructors in ~Message() free data and handle buffers

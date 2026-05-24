@@ -48,10 +48,10 @@ auto handle_lookup(handle_t h, Rights needed = Rights{},
                    Rights* out_rights = nullptr) -> KernelObject*;
 
 template <typename T>
-auto typed_lookup(HandleTable& table, handle_t h, Rights needed = {}) -> km::Result<T*> {
+auto typed_lookup(HandleTable& table, handle_t h, Rights needed = {}) -> kstd::Result<T*> {
     auto* obj = table.Lookup(h, needed);
-    if (!obj || obj->type() != T::kType) return km::Result<T*>::Err(-1);
-    return km::Result<T*>::Ok(static_cast<T*>(obj));
+    if (!obj || obj->type() != T::kType) return kstd::Result<T*>::Err(-1);
+    return kstd::Result<T*>::Ok(static_cast<T*>(obj));
 }
 
 class ScopedHandle {

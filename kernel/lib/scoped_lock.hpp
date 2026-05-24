@@ -1,7 +1,7 @@
 // kernel/lib/scoped_lock.hpp
 #pragma once
 
-namespace km {
+namespace kstd {
 
 template <typename Lock>
 class ScopedLock {
@@ -13,4 +13,4 @@ public:
     auto operator=(const ScopedLock&) = delete;
 };
 
-} // namespace km
+} // namespace kstd
